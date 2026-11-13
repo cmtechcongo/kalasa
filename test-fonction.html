@@ -7,7 +7,7 @@ body{font-family:system-ui,sans-serif;padding:16px;max-width:420px;margin:auto}
 button{width:100%;padding:14px;font-size:1rem;margin-top:12px}
 pre{white-space:pre-wrap;word-break:break-word;background:#eee;padding:10px;border-radius:8px}
 </style></head><body>
-<h3>Test creer_utilisateurs</h3>
+<h3>Test creer-utilisateurs-v2</h3>
 <button id="go">Créer l'utilisateur de test</button>
 <pre id="r">En attente…</pre>
 <script type="module">
@@ -18,7 +18,7 @@ document.getElementById('go').onclick = async () => {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { r.textContent = 'Pas de session : connectez-vous d\'abord sur login.html.'; return; }
-    const rep = await fetch(SUPABASE_URL + '/functions/v1/creer_utilisateurs', {
+    const rep = await fetch(SUPABASE_URL + '/functions/v1/creer-utilisateurs-v2', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
