@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Utilisateurs</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+.el{display:flex;justify-content:space-between;align-items:center;gap:8px}.el small{display:block;opacity:.75;margin-top:2px}
+.tag{display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:99px;background:#16a34a;color:#fff;margin-left:6px}
+.tag.off{background:#8886}
+.err{color:#dc2626;font-size:.88rem;min-height:1.2em;margin:8px 0 0;word-break:break-word}
+.ok{background:#16a34a;color:#fff;padding:12px;border-radius:8px;margin-top:10px;display:none;word-break:break-word}
+.pw{display:flex;gap:8px}.pw input{flex:1}.pw button{white-space:nowrap}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"><a href="index.html">← Accueil</a></nav>
+<main>
+<form class="card" id="f" novalidate>
+  <h2>Nouvel utilisateur</h2>
+  <label>Rôle *</label>
+  <select id="role">
+    <option value="enseignant" selected>Enseignant</option>
+    <option value="secretaire">Secrétaire</option>
+    <option value="directeur">Directeur</option>
+    <option value="caissier">Caissier</option>
+  </select>
+  <label>Nom complet *</label><input type="text" id="nom" list="lp" autocomplete="off">
+  <datalist id="lp"></datalist><p id="hn" style="font-size:.82rem;opacity:.8;margin:4px 0 0"></p>
+  <label>Numéro matricule du personnel (confirmation) *</label>
+  <input type="text" id="mat" autocomplete="off" autocapitalize="characters" placeholder="ex : PER-0001">
+  <label>Identifiant *</label>
+  <input type="text" id="login" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="ex : m.kasongo">
+  <label>Mot de passe initial * (10 caractères min.)</label>
+  <div class="pw"><input type="text" id="mdp" autocomplete="off"><button type="button" class="sec" id="gen">🎲 Générer</button></div>
+  <p class="err" id="err" role="alert"></p>
+  <button style="width:100%;margin-top:6px" id="bok">Créer le compte</button>
+  <div class="ok" id="ok"></div>
+</form>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession, SUPABASE_URL, SUPABASE_KEY } from './kalasa-db.js';
+
+const C = await exigerSession(['admin']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ETABS = C.etablissements || [];
+const nomEtab = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code) : '—'; };
+const ROLES = { admin: 'Administrateur', directeur: 'Directeur', secretaire: 'Secrétaire', enseignant: 'Enseignant', caissier: 'Caissier', eleve: 'Élève' };
+const cle = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
+const normM = m => String(m || '').replace(/\s+/g, '').toUpperCase();
+const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
+
+let SANS = [], AVEC = [];
+
+function maj() {
+  const h = $('hn'), n = $('nom');
+  const l = n.value.trim() ? SANS.filter(x => cle(nomDe(x)) === cle(n.value)) : [];
+  h.textContent = !n.value.trim() ? 'Choisissez un nom dans la liste du personnel sans compte.'
+    : l.length ? '✔ Nom trouvé' + (l.length > 1 ? ' (' + l.length + ' personnes portent ce nom)' : '') + ' — confirmez par le numéro matricule.'
+    : '✖ Ce nom n\'est pas dans la liste du personnel sans compte.';
+}
+
+function genererMdp() {
+  const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const v = new Uint32Array(12); crypto.getRandomValues(v);
+  return [...v].map(x => a[x % a.length]).join('');
+}
+
+async function charger() {
+  const { data, error } = await sb.from('personnel')
+    .select('id, matricule, nom, postnom, prenom, fonction, etablissement_id, utilisateur_id').order('nom');
+  if (error) { $('err').textContent = 'Lecture impossible : ' + error.message; return; }
+  SANS = (data || []).filter(x => !x.utilisateur_id);
+  AVEC = (data || []).filter(x => x.utilisateur_id);
+  // Les matricules ne sont volontairement PAS affichés dans la liste.
+  $('lp').innerHTML = SANS.map(x => `<option value="${esc(nomDe(x))}">${esc(x.fonction)} · ${esc(nomEtab(x.etablissement_id))}</option>`).join('');
+  maj();
+
+  let prof = {};
+  if (AVEC.length) {
+    const r = await sb.from('profils').select('id, identifiant, role, actif').in('id', AVEC.map(x => x.utilisateur_id));
+    if (!r.error) (r.data || []).forEach(p => prof[p.id] = p);
+  }
+  $('liste').innerHTML = AVEC.length ? AVEC.map(x => {
+    const p = prof[x.utilisateur_id];
+    return `<div class="card el"><div>
+      <b>${esc(nomDe(x))}</b>${p ? (p.actif === false ? '<span class="tag off">Désactivé</span>' : '<span class="tag">Actif</span>') : ''}
+      <small>${p ? '@' + esc(p.identifiant) + ' · ' + esc(ROLES[p.role] || p.role) : 'Compte lié'} · 🔗 ${esc(x.matricule)}</small>
+      <small>🏫 ${esc(nomEtab(x.etablissement_id))}</small></div></div>`;
+  }).join('') : '<p style="text-align:center;opacity:.6">Aucun compte lié au personnel</p>';
+}
+
+async function creer(ev) {
+  ev.preventDefault();
+  const err = $('err'), ok = $('ok'), b = $('bok');
+  err.textContent = ''; ok.style.display = 'none';
+  try {
+    const role = $('role').value, nom = $('nom').value.trim();
+    const login = $('login').value.trim(), mdp = $('mdp').value;
+    const l = SANS.filter(x => cle(nomDe(x)) === cle(nom));
+    if (!l.length) throw new Error('Refusé : « ' + nom + ' » n\'est pas dans la liste du personnel sans compte. Enregistrez d\'abord cette personne dans la page Personnel.');
+    const m = normM($('mat').value);
+    if (!m) throw new Error('Saisissez le numéro matricule du personnel pour confirmer.');
+    const F = l.filter(x => normM(x.matricule) === m);
+    if (!F.length) throw new Error('Refusé : ce numéro matricule ne correspond pas à « ' + nom + ' ».');
+    if (F.length > 1) throw new Error('Plusieurs fiches correspondent (établissements différents). Contactez le support.');
+    const fiche = F[0];
+    if (role === 'enseignant' && fiche.fonction !== 'Enseignant') throw new Error('Refusé : dans la liste du personnel, ' + nomDe(fiche) + ' est « ' + fiche.fonction + ' », pas « Enseignant ».');
+    if (login.length < 3) throw new Error('Identifiant trop court (3 caractères minimum).');
+    if (mdp.length < 10) throw new Error('Mot de passe trop court (10 caractères minimum).');
+
+    b.disabled = true; b.textContent = 'Création…';
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Session expirée : reconnectez-vous.');
+    const r = await fetch(SUPABASE_URL + '/functions/v1/creer-utilisateurs-v3', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ personnel_id: fiche.id, identifiant: login, mot_de_passe: mdp, role })
+    });
+    let j = {}; try { j = await r.json(); } catch (_) {}
+    if (r.status !== 201) throw new Error(j.message || ('Erreur ' + r.status));
+
+    ok.innerHTML = '✔ Compte créé.<br>Identifiant : <b>' + esc(login) + '</b><br>Mot de passe : <b>' + esc(mdp) +
+      '</b><br>Notez-les maintenant : le mot de passe ne sera plus affichable.';
+    ok.style.display = 'block';
+    $('nom').value = ''; $('mat').value = ''; $('login').value = ''; $('mdp').value = ''; $('role').value = 'enseignant';
+    await charger();
+  } catch (x) { err.textContent = x.message || String(x); }
+  b.disabled = false; b.textContent = 'Créer le compte';
+}
+
+$('nom').addEventListener('input', maj);
+$('gen').addEventListener('click', () => { $('mdp').value = genererMdp(); });
+$('f').addEventListener('submit', creer);
+await charger();
+</script>
+</body></html>
