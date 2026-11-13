@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KALASA — Accueil</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a}
+  header{background:#2563eb;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+  header h1{margin:0;font-size:1.1rem;letter-spacing:2px}
+  button{background:#fff3;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-size:.9rem}
+  main{padding:16px;max-width:600px;margin:auto}
+  .carte{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+  .carte h2{margin:0 0 8px;font-size:1rem}
+</style></head>
+<body>
+<header><h1>🎓 KALASA</h1><button id="out">Déconnexion</button></header>
+<main>
+  <div class="carte"><h2 id="nom">Chargement…</h2><div id="role"></div></div>
+  <div class="carte"><h2>Établissements autorisés</h2><ul id="etabs"></ul></div>
+</main>
+<script type="module">
+  import { exigerSession, deconnexion } from './kalasa-db.js';
+  document.getElementById('out').onclick = deconnexion;
+  const ctx = await exigerSession();
+  if (ctx) {
+    document.getElementById('nom').textContent = ctx.nom_complet;
+    document.getElementById('role').textContent = 'Rôle : ' + ctx.role + ' • Identifiant : ' + ctx.identifiant;
+    const ul = document.getElementById('etabs');
+    if (!ctx.etablissements.length) ul.innerHTML = '<li>Aucun établissement actif</li>';
+    ctx.etablissements.forEach(e => {
+      const li = document.createElement('li');
+      li.textContent = e.nom + ' (' + e.code + ')';
+      ul.appendChild(li);
+    });
+  }
+</script>
+</body></html>
