@@ -18,7 +18,7 @@ document.getElementById('go').onclick = async () => {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { r.textContent = 'Pas de session : connectez-vous d\'abord sur login.html.'; return; }
-    const rep = await fetch(SUPABASE_URL + '/functions/v1/rapid-worker', {
+    const rep = await fetch(SUPABASE_URL + '/functions/v1/creer_utilisateurs', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
