@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.json">
+<title>KALASA — Connexion</title>
+<style>
+:root{--m:#2563eb;--bg:#f5f7fb;--c:#fff;--t:#1b2430}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1520;--c:#18212f;--t:#e8edf5}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;
+  padding:20px 14px calc(20px + env(safe-area-inset-bottom,0px));font-family:system-ui,sans-serif;background:var(--bg);color:var(--t)}
+.logo{text-align:center}.logo span{font-size:3rem}.logo h1{margin:4px 0 0;letter-spacing:.12em}.logo p{margin:2px 0 0;opacity:.7}
+form{width:100%;max-width:380px;background:var(--c);border-radius:16px;padding:20px;box-shadow:0 4px 16px #0002}
+h2{margin:0 0 4px;font-size:1.1rem}
+label{display:block;font-size:.8rem;margin:12px 0 4px;opacity:.8}
+.pw{position:relative}.pw button{position:absolute;right:4px;top:4px;width:42px;height:42px;background:none;border:0;font-size:1.1rem;cursor:pointer;color:inherit}
+input[type=text],input[type=password]{width:100%;padding:13px;border:1px solid #8885;border-radius:10px;font-size:1rem;background:transparent;color:inherit}
+.pw input{padding-right:48px}
+.ck{display:flex;align-items:center;gap:8px;font-size:.9rem;margin:14px 0 0;opacity:1}.ck input{width:auto}
+.go{width:100%;margin-top:16px;padding:14px;border:0;border-radius:10px;background:var(--m);color:#fff;font-size:1.05rem;font-weight:600;cursor:pointer}
+.go:disabled{opacity:.55}
+.err{min-height:1.3em;margin:10px 0 0;color:#dc2626;font-size:.88rem}
+.note{max-width:380px;text-align:center;font-size:.78rem;opacity:.65}
+</style></head><body>
+
+<div class="logo"><span>🎓</span><h1>KALASA</h1><p>Gestion scolaire</p></div>
+
+<div style="width:100%;display:flex;justify-content:center">
+<form id="f" autocomplete="on">
+  <h2>Connexion</h2>
+  <label for="id">Identifiant</label>
+  <input type="text" id="id" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="m1">Mot de passe</label>
+  <div class="pw"><input type="password" id="m1" autocomplete="current-password" required>
+    <button type="button" id="oeil" aria-label="Afficher le mot de passe">👁</button></div>
+  <label class="ck"><input type="checkbox" id="rester"> Rester connecté 30 jours sur cet appareil</label>
+  <p class="err" id="err" role="alert"></p>
+  <button class="go" id="ok">Se connecter</button>
+</form>
+</div>
+
+<p class="note">
+  <a href="activation.html" style="color:inherit">🎓 Élève : activer mon compte ou demander mon inscription</a><br>
+  Mot de passe oublié ? Demandez à l'administrateur de le réinitialiser.
+</p>
+
+<script type="module">
+import { sb, emailPour, ouvrirSession, garder, contexte, ACCUEIL } from './kalasa-db.js';
+
+const $ = i => document.getElementById(i);
+const retour = (() => {
+  const r = new URLSearchParams(location.search).get('retour') || '';
+  return /^[a-z0-9-]+\.html(\?[\w=&.%-]*)?$/i.test(r) && !/^(login|demarrage)/i.test(r) ? r : '';
+})();
+
+$('oeil').onclick = () => { const i = $('m1'); i.type = i.type === 'password' ? 'text' : 'password'; };
+
+/* Déjà connecté ? */
+try {
+  const { data: { session } } = await sb.auth.getSession();
+  const c = contexte();
+  if (session && c && c.exp > Date.now()) {
+    const p = await ouvrirSession();
+    if (p && p.actif) location.replace(retour || ACCUEIL[p.role] || 'index.html');
+  }
+} catch {}
+
+/* Verrouillage après plusieurs échecs (en plus de la limite côté serveur) */
+const L = 'ksec';
+const lireL = () => { try { return JSON.parse(localStorage.getItem(L)) || { n: 0, jusqua: 0 }; } catch { return { n: 0, jusqua: 0 }; } };
+const attente = () => Math.max(0, Math.ceil((lireL().jusqua - Date.now()) / 1000));
+const echec = () => {
+  const s = lireL(); s.n++;
+  if (s.n >= 5) s.jusqua = Date.now() + Math.min(900, 30 * 2 ** (s.n - 5)) * 1000;
+  localStorage.setItem(L, JSON.stringify(s));
+};
+const reinit = () => localStorage.setItem(L, JSON.stringify({ n: 0, jusqua: 0 }));
+
+let minuterie = null;
+function verrou() {
+  clearInterval(minuterie);
+  const tick = () => {
+    const w = attente();
+    if (w > 0) { $('ok').disabled = true; $('err').textContent = 'Trop d\'essais. Réessayez dans ' + w + ' s.'; }
+    else { $('ok').disabled = false; clearInterval(minuterie); }
+  };
+  if (attente() > 0) { tick(); minuterie = setInterval(tick, 1000); }
+}
+verrou();
+
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  if (attente() > 0) return;
+  const err = $('err'), btn = $('ok');
+  err.textContent = ''; btn.disabled = true; btn.textContent = 'Connexion…';
+  const id = $('id').value.trim(), mdp = $('m1').value;
+
+  try {
+    let email;
+    try { email = await emailPour(id); }
+    catch (x) { throw new Error('SERVEUR : ' + (x.message || x)); }
+    if (!email) throw new Error('INVALIDE');
+
+    const { error } = await sb.auth.signInWithPassword({ email, password: mdp });
+    if (error) throw error;
+
+    const p = await ouvrirSession();
+    if (!p || !p.actif) { await sb.auth.signOut(); throw new Error('NON_AUTORISE'); }
+    if (p.role !== 'admin' && !p.etablissements.length) {
+      await sb.auth.signOut(); throw new Error('SANS_ETAB');
+    }
+
+    reinit();
+    const duree = ($('rester').checked ? 30 * 24 : 12) * 3600e3;
+    garder({
+      ...p,
+      etabId: p.etablissements[0] ? p.etablissements[0].id : null,
+      duree, exp: Date.now() + duree
+    });
+    location.replace(retour || ACCUEIL[p.role] || 'index.html');
+  } catch (x) {
+    const m = x.message || String(x);
+    const mauvais = m === 'INVALIDE' || x.code === 'invalid_credentials' || m.includes('Invalid login');
+    if (mauvais) echec();
+    err.textContent =
+        m === 'NON_AUTORISE' ? 'Compte non autorisé. Contactez l\'administrateur.'
+      : m === 'SANS_ETAB' ? 'Aucun établissement ne vous est attribué. Contactez l\'administrateur.'
+      : m.startsWith('SERVEUR') ? m
+      : mauvais ? 'Identifiant ou mot de passe incorrect.'
+      : (x.status === 429 || m.toLowerCase().includes('rate limit')) ? 'Trop de tentatives. Patientez quelques minutes.'
+      : m.includes('fetch') ? 'Connexion impossible : vérifiez votre connexion Internet.'
+      : 'Erreur : ' + m;
+    $('m1').value = '';
+    btn.disabled = false; btn.textContent = 'Se connecter';
+    verrou();
+  }
+};
+</script>
+</body></html>
