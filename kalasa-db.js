@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export const SUPABASE_URL = 'https://VOTRE-PROJET.supabase.co';
-export const SUPABASE_KEY = 'sb_publishable_VOTRE_CLE';
+export const SUPABASE_URL = 'https://jcbxzkdintbfzncyxljy.supabase.com';
+export const SUPABASE_KEY = sb_publishable_n_WNZW31QaI9U1ZA4hI9SA_CjMzHkL';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -38,7 +38,12 @@ export const garder = (ctx) => localStorage.setItem(CLE, JSON.stringify(ctx));
    rolesAutorises : liste de rôles (ou rien = tous les rôles connectés) */
 export async function exigerSession(rolesAutorises) {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { location.replace('login.html'); return null; }
+  const ancien = contexte() || {};
+
+  if (!session || (ancien.exp && ancien.exp < Date.now())) {
+    await deconnexion();
+    return null;
+  }
 
   let profil = null;
   try { profil = await ouvrirSession(); } catch { profil = null; }
@@ -50,10 +55,10 @@ export async function exigerSession(rolesAutorises) {
     return null;
   }
 
-  const ancien = contexte() || {};
   const etab = profil.etablissements.find(e => e.id === ancien.etabId)
             || profil.etablissements[0] || null;
-  const ctx = { ...profil, etabId: etab ? etab.id : null };
+  const duree = ancien.duree || 12 * 3600e3;
+  const ctx = { ...profil, etabId: etab ? etab.id : null, duree, exp: Date.now() + duree };
   garder(ctx);
   return ctx;
 }
