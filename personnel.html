@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Personnel</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+.photo{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:6px}
+.photo img{width:96px;height:96px;border-radius:50%;object-fit:cover}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.el{display:flex;align-items:center;gap:10px}
+.el img,.av{width:52px;height:52px}
+.el img{border-radius:50%;object-fit:cover}
+.tag{background:var(--m);color:#fff;border-radius:20px;padding:2px 8px;font-size:.7rem}
+.msg{background:#16a34a;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;display:none;text-align:center}
+a.tel{color:inherit}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"><a href="index.html">← Accueil</a></nav>
+<main>
+<div class="warn" id="warn"></div><div class="msg" id="msg"></div>
+
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouveau membre du personnel</h2>
+  <div class="photo">
+    <img id="apercu" alt="Photo">
+    <input id="fichier" type="file" accept="image/*" hidden>
+    <button type="button" class="sec" id="bphoto">📷 Ajouter une photo</button>
+  </div>
+
+  <label>Établissement *</label><select id="etab"></select>
+  <label>Fonction *</label><select id="fonction"></select>
+
+  <div id="ens" style="display:none">
+    <label>Matière(s) enseignée(s)</label><input id="matiere" placeholder="Ex : Mathématiques, Physique">
+  </div>
+
+  <label>Nom *</label><input id="nom" autocomplete="off">
+  <label>Postnom</label><input id="postnom" autocomplete="off">
+  <label>Prénom *</label><input id="prenom" autocomplete="off">
+  <div class="g">
+    <div><label>Sexe *</label>
+      <select id="sexe"><option value="">Choisir…</option><option value="M">Masculin</option><option value="F">Féminin</option></select></div>
+    <div><label>Date d'embauche</label><input id="embauche" type="date"></div>
+  </div>
+  <div class="g">
+    <div><label>Téléphone *</label><input id="tel" type="tel"></div>
+    <div><label>E-mail</label><input id="email" type="email"></div>
+  </div>
+  <label>Adresse</label><input id="adresse" autocomplete="off">
+
+  <div class="g3">
+    <div><label>Salaire</label><input id="salaire" type="number" min="0" step="0.01" placeholder="0"></div>
+    <div><label>Prime</label><input id="prime" type="number" min="0" step="0.01" placeholder="0"></div>
+    <div><label>Allocation</label><input id="allocation" type="number" min="0" step="0.01" placeholder="0"></div>
+  </div>
+
+  <div class="acts">
+    <button id="bok">Enregistrer</button>
+    <button type="button" class="sec" id="ann" style="display:none">Annuler</button>
+  </div>
+</form>
+
+<div class="card">
+  <h2>Personnel (<span id="total">0</span>)</h2>
+  <label>Fonction</label><select id="filtre"></select>
+  <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom, matricule, matière…">
+  <div class="acts"><button class="sec" type="button" id="bexp">⬇ Exporter (Excel/CSV)</button></div>
+</div>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const FONCTIONS = ['Enseignant', "Directeur / Chef d'établissement", 'Préfet des études', 'Secrétaire', 'Comptable / Économe', 'Surveillant / Discipline', 'Bibliothécaire', 'Autre'];
+const ETABS = C.etablissements || [];
+let L = [], eid = null, photo = '';
+
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const notifier = t => { const m = $('msg'); m.textContent = t; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 2000); };
+const etabCourant = () => $('etab').value;
+const nomEtab = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code || '—') : '—'; };
+const total = x => (+x.salaire || 0) + (+x.prime || 0) + (+x.allocation || 0);
+const nul = v => { v = String(v ?? '').trim(); return v === '' ? null : v; };
+
+function init() {
+  if (!ETABS.length) { erreur('Aucun établissement disponible. Créez-en un d\'abord.'); }
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}" ${e.id === C.etabId ? 'selected' : ''}>${esc(e.nom || e.code)}</option>`).join('');
+  $('fonction').innerHTML = FONCTIONS.map(r => `<option>${esc(r)}</option>`).join('');
+  $('filtre').innerHTML = '<option value="">Toutes les fonctions</option>' + FONCTIONS.map(r => `<option>${esc(r)}</option>`).join('');
+  majEns(); apercu();
+}
+function majEns() { $('ens').style.display = $('fonction').value === 'Enseignant' ? 'block' : 'none'; }
+function apercu() {
+  $('apercu').src = photo || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#8884"/><circle cx="48" cy="38" r="16" fill="#8889"/><ellipse cx="48" cy="84" rx="28" ry="22" fill="#8889"/></svg>');
+}
+function choisirPhoto(inp) {
+  const f = inp.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 400 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      photo = c.toDataURL('image/jpeg', .7); apercu();
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(f);
+}
+
+async function charger() {
+  erreur('');
+  if (!etabCourant()) { L = []; rendu(); return; }
+  const { data, error } = await sb.from('personnel').select('*').eq('etablissement_id', etabCourant()).order('nom');
+  if (error) { erreur('Lecture impossible : ' + esc(error.message)); L = []; }
+  else L = data || [];
+  rendu();
+}
+
+async function prochainMatricule(etab) {
+  const { data, error } = await sb.from('personnel').select('matricule').eq('etablissement_id', etab);
+  if (error) throw error;
+  const max = Math.max(0, ...(data || []).map(x => +String(x.matricule).split('-').pop() || 0));
+  return 'PER-' + String(max + 1).padStart(4, '0');
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  const nom = $('nom').value.trim(), prenom = $('prenom').value.trim(), tel = $('tel').value.trim();
+  if (!etabCourant()) return erreur('Choisissez un établissement.');
+  if (!nom || !prenom || !$('sexe').value || !tel) return erreur('Remplissez les champs obligatoires : nom, prénom, sexe, téléphone.');
+  const ens = $('fonction').value === 'Enseignant';
+  const d = {
+    fonction: $('fonction').value,
+    matiere: ens ? nul($('matiere').value) : null,
+    nom, postnom: nul($('postnom').value), prenom,
+    sexe: $('sexe').value,
+    date_embauche: nul($('embauche').value),
+    telephone: tel, email: nul($('email').value), adresse: nul($('adresse').value),
+    salaire: +$('salaire').value || 0, prime: +$('prime').value || 0, allocation: +$('allocation').value || 0,
+    photo: photo || null
+  };
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) {
+      const { error } = await sb.from('personnel').update(d).eq('id', eid);
+      if (error) throw error;
+    } else {
+      let essai = 0, err = null;
+      while (essai < 2) {
+        const matricule = await prochainMatricule(etabCourant());
+        const { error } = await sb.from('personnel').insert({ ...d, etablissement_id: etabCourant(), matricule });
+        if (!error) { err = null; break; }
+        err = error; essai++;
+        if (error.code !== '23505') break;
+      }
+      if (err) throw err;
+    }
+    notifier(eid ? '✔ Modifié' : '✔ Enregistré');
+    reinit(); await charger();
+  } catch (x) { erreur('Enregistrement impossible : ' + esc(x.message || x)); }
+  b.disabled = false;
+}
+
+function reinit() {
+  const e = etabCourant();
+  $('f').reset(); photo = ''; eid = null;
+  $('etab').value = e; $('etab').disabled = false;
+  $('t').textContent = 'Nouveau membre du personnel';
+  $('ann').style.display = 'none'; majEns(); apercu();
+}
+function modifier(id) {
+  const x = L.find(p => p.id === id); if (!x) return;
+  $('etab').value = x.etablissement_id; $('etab').disabled = true;
+  $('fonction').value = x.fonction; majEns();
+  const m = { matiere: 'matiere', nom: 'nom', postnom: 'postnom', prenom: 'prenom', sexe: 'sexe', embauche: 'date_embauche', tel: 'telephone', email: 'email', adresse: 'adresse', salaire: 'salaire', prime: 'prime', allocation: 'allocation' };
+  Object.keys(m).forEach(k => $(k).value = x[m[k]] ?? '');
+  photo = x.photo || ''; apercu(); eid = id;
+  $('t').textContent = 'Modifier — ' + x.matricule; $('ann').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function supprimer(id) {
+  const x = L.find(p => p.id === id); if (!x) return;
+  if (x.utilisateur_id) return erreur('Cette personne a un compte de connexion. Supprimez ou désactivez d\'abord son compte.');
+  if (!confirm('Supprimer cette personne ?')) return;
+  const { error } = await sb.from('personnel').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  await charger();
+}
+
+function filtrees() {
+  const f = $('filtre').value, q = $('q').value.toLowerCase();
+  return L.filter(x => (!f || x.fonction === f) && [x.matricule, x.nom, x.postnom, x.prenom, x.matiere, x.telephone]
+    .some(v => String(v || '').toLowerCase().includes(q)));
+}
+function rendu() {
+  const t = filtrees();
+  $('total').textContent = t.length;
+  $('liste').innerHTML = t.length ? t.map(x => `<div class="card el">
+    ${x.photo ? `<img src="${esc(x.photo)}" alt="">` : `<div class="av">${esc((x.prenom || x.nom || '?')[0].toUpperCase())}</div>`}
+    <div class="info"><b>${esc(x.nom)} ${esc(x.postnom)} ${esc(x.prenom)}</b>
+      <small><span class="tag">${esc(x.fonction)}</span> ${esc(x.matricule)}${x.utilisateur_id ? ' · 🔑 compte' : ''}</small>
+      ${x.matiere ? `<small>📘 ${esc(x.matiere)}</small>` : ''}
+      <small>📞 <a class="tel" href="tel:${esc(x.telephone)}">${esc(x.telephone)}</a>${x.email ? ' · ✉ ' + esc(x.email) : ''}</small>
+      <small>💰 Salaire : ${(+x.salaire || 0).toLocaleString('fr-FR')} · Prime : ${(+x.prime || 0).toLocaleString('fr-FR')} · Allocation : ${(+x.allocation || 0).toLocaleString('fr-FR')} → <b>Total : ${total(x).toLocaleString('fr-FR')}</b></small>
+      <small>🏫 ${esc(nomEtab(x.etablissement_id))}</small></div>
+    <div class="b"><button class="sec" data-edit="${esc(x.id)}">✎</button><button class="del" data-del="${esc(x.id)}">✕</button></div></div>`).join('')
+    : '<p style="text-align:center;opacity:.6">Aucun membre du personnel</p>';
+}
+function exporter() {
+  const t = filtrees(); if (!t.length) return notifier('Rien à exporter');
+  const h = ['Matricule', 'Nom', 'Postnom', 'Prénom', 'Sexe', 'Téléphone', 'E-mail', 'Fonction', 'Matière', 'Établissement', 'Embauche', 'Adresse', 'Salaire', 'Prime', 'Allocation', 'Total rémunération'];
+  const r = t.map(x => [x.matricule, x.nom, x.postnom, x.prenom, x.sexe, x.telephone, x.email, x.fonction, x.matiere, nomEtab(x.etablissement_id), x.date_embauche, x.adresse, +x.salaire || 0, +x.prime || 0, +x.allocation || 0, total(x)]
+    .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'personnel_kalasa.csv'; a.click();
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('fonction').addEventListener('change', majEns);
+$('etab').addEventListener('change', () => { if (!eid) charger(); });
+$('bphoto').addEventListener('click', () => $('fichier').click());
+$('fichier').addEventListener('change', e => choisirPhoto(e.target));
+$('ann').addEventListener('click', reinit);
+$('filtre').addEventListener('change', rendu);
+$('q').addEventListener('input', rendu);
+$('bexp').addEventListener('click', exporter);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.edit) modifier(b.dataset.edit);
+  if (b.dataset.del) supprimer(b.dataset.del);
+});
+
+init();
+await charger();
+</script>
+</body></html>
