@@ -20,23 +20,25 @@ input[type=text],input[type=password]{width:100%;padding:13px;border:1px solid #
 .ck{display:flex;align-items:center;gap:8px;font-size:.9rem;margin:14px 0 0;opacity:1}.ck input{width:auto}
 .go{width:100%;margin-top:16px;padding:14px;border:0;border-radius:10px;background:var(--m);color:#fff;font-size:1.05rem;font-weight:600;cursor:pointer}
 .go:disabled{opacity:.55}
-.err{min-height:1.3em;margin:10px 0 0;color:#dc2626;font-size:.88rem}
+.err{min-height:1.3em;margin:10px 0 0;color:#dc2626;font-size:.88rem;font-weight:600;word-break:break-word}
+.diag{min-height:1.2em;margin:6px 0 0;font-size:.78rem;opacity:.75;word-break:break-word}
 .note{max-width:380px;text-align:center;font-size:.78rem;opacity:.65}
 </style></head><body>
 
 <div class="logo"><span>🎓</span><h1>KALASA</h1><p>Gestion scolaire</p></div>
 
 <div style="width:100%;display:flex;justify-content:center">
-<form id="f" autocomplete="on">
+<form id="f" autocomplete="on" onsubmit="return false" novalidate>
   <h2>Connexion</h2>
   <label for="id">Identifiant</label>
-  <input type="text" id="id" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <input type="text" id="id" autocomplete="username" autocapitalize="none" spellcheck="false">
   <label for="m1">Mot de passe</label>
-  <div class="pw"><input type="password" id="m1" autocomplete="current-password" required>
+  <div class="pw"><input type="password" id="m1" autocomplete="current-password">
     <button type="button" id="oeil" aria-label="Afficher le mot de passe">👁</button></div>
   <label class="ck"><input type="checkbox" id="rester"> Rester connecté 30 jours sur cet appareil</label>
   <p class="err" id="err" role="alert"></p>
-  <button class="go" id="ok">Se connecter</button>
+  <p class="diag" id="diag">Chargement…</p>
+  <button class="go" id="ok" type="button">Se connecter</button>
 </form>
 </div>
 
@@ -45,10 +47,51 @@ input[type=text],input[type=password]{width:100%;padding:13px;border:1px solid #
   Mot de passe oublié ? Demandez à l'administrateur de le réinitialiser.
 </p>
 
-<script type="module">
-import { sb, emailPour, ouvrirSession, garder, contexte, ACCUEIL } from './kalasa-db.js';
+<!-- Filet de sécurité : affiche toute erreur, même si le module principal ne démarre pas -->
+<script>
+(function () {
+  var e = document.getElementById('err'), d = document.getElementById('diag');
+  window.addEventListener('error', function (ev) { e.textContent = 'Erreur JavaScript : ' + (ev.message || 'inconnue'); });
+  window.addEventListener('unhandledrejection', function (ev) {
+    e.textContent = 'Erreur : ' + ((ev.reason && ev.reason.message) || ev.reason);
+  });
+  setTimeout(function () {
+    if (!window.__kalasaPret) {
+      e.textContent = 'Chargement trop long ou impossible. Vérifiez Internet et le fichier kalasa-db.js.';
+      d.textContent = 'Le module de connexion ne s\'est pas chargé.';
+    }
+  }, 8000);
+})();
+</script>
 
+<script type="module">
 const $ = i => document.getElementById(i);
+const err = $('err'), diag = $('diag'), btn = $('ok');
+const msg = t => { err.textContent = t; };
+
+/* 1. Charger kalasa-db.js en vérifiant qu'il est complet et configuré */
+let K;
+try {
+  K = await import('./kalasa-db.js');
+} catch (e) {
+  msg('Impossible de charger kalasa-db.js : ' + (e.message || e));
+  diag.textContent = 'Vérifie que kalasa-db.js existe dans le dépôt et ne contient pas d\'erreur.';
+  throw e;
+}
+const { sb, emailPour, ouvrirSession, garder, contexte, ACCUEIL } = K;
+if (![sb, emailPour, ouvrirSession, garder, contexte, ACCUEIL].every(Boolean)) {
+  msg('kalasa-db.js est une ancienne version : il manque des fonctions.');
+  diag.textContent = 'Remplace kalasa-db.js par la dernière version (emailPour, ouvrirSession, contexte...).';
+  throw new Error('kalasa-db.js incomplet');
+}
+if (!K.SUPABASE_URL || K.SUPABASE_URL.includes('VOTRE') || !K.SUPABASE_KEY || K.SUPABASE_KEY.includes('VOTRE')) {
+  msg('kalasa-db.js ne contient pas encore l\'URL et la clé de ton projet Supabase.');
+  diag.textContent = 'Remplace VOTRE-PROJET et VOTRE_CLE par les vraies valeurs du projet Kalasa.';
+  throw new Error('configuration manquante');
+}
+window.__kalasaPret = true;
+diag.textContent = 'Prêt.';
+
 const retour = (() => {
   const r = new URLSearchParams(location.search).get('retour') || '';
   return /^[a-z0-9-]+\.html(\?[\w=&.%-]*)?$/i.test(r) && !/^(login|demarrage)/i.test(r) ? r : '';
@@ -56,17 +99,25 @@ const retour = (() => {
 
 $('oeil').onclick = () => { const i = $('m1'); i.type = i.type === 'password' ? 'text' : 'password'; };
 
-/* Déjà connecté ? */
+/* 2. Déjà connecté ? (sans boucle de redirection) */
 try {
   const { data: { session } } = await sb.auth.getSession();
   const c = contexte();
   if (session && c && c.exp > Date.now()) {
     const p = await ouvrirSession();
-    if (p && p.actif) location.replace(retour || ACCUEIL[p.role] || 'index.html');
+    if (p && p.actif) {
+      if (retour) {
+        diag.textContent = 'Connecté en tant que ' + p.nom_complet + '. La page « ' + retour +
+          ' » n\'est pas encore compatible avec la nouvelle connexion : elle te renvoie ici.';
+      } else {
+        diag.textContent = 'Déjà connecté, redirection…';
+        location.replace(ACCUEIL[p.role] || 'index.html');
+      }
+    }
   }
-} catch {}
+} catch (e) { diag.textContent = 'Vérification de session impossible : ' + (e.message || e); }
 
-/* Verrouillage après plusieurs échecs (en plus de la limite côté serveur) */
+/* 3. Verrouillage après plusieurs échecs */
 const L = 'ksec';
 const lireL = () => { try { return JSON.parse(localStorage.getItem(L)) || { n: 0, jusqua: 0 }; } catch { return { n: 0, jusqua: 0 }; } };
 const attente = () => Math.max(0, Math.ceil((lireL().jusqua - Date.now()) / 1000));
@@ -82,30 +133,36 @@ function verrou() {
   clearInterval(minuterie);
   const tick = () => {
     const w = attente();
-    if (w > 0) { $('ok').disabled = true; $('err').textContent = 'Trop d\'essais. Réessayez dans ' + w + ' s.'; }
-    else { $('ok').disabled = false; clearInterval(minuterie); }
+    if (w > 0) { btn.disabled = true; msg('Trop d\'essais. Réessayez dans ' + w + ' s.'); }
+    else { btn.disabled = false; clearInterval(minuterie); }
   };
   if (attente() > 0) { tick(); minuterie = setInterval(tick, 1000); }
 }
 verrou();
 
-$('f').onsubmit = async e => {
-  e.preventDefault();
+/* 4. Connexion */
+async function entrer() {
   if (attente() > 0) return;
-  const err = $('err'), btn = $('ok');
-  err.textContent = ''; btn.disabled = true; btn.textContent = 'Connexion…';
+  msg(''); btn.disabled = true; btn.textContent = 'Connexion…';
   const id = $('id').value.trim(), mdp = $('m1').value;
 
   try {
+    if (!id || !mdp) throw new Error('VIDE');
+
+    diag.textContent = 'Étape 1/3 : recherche de l\'identifiant…';
     let email;
     try { email = await emailPour(id); }
     catch (x) { throw new Error('SERVEUR : ' + (x.message || x)); }
     if (!email) throw new Error('INVALIDE');
 
+    diag.textContent = 'Étape 2/3 : vérification du mot de passe…';
     const { error } = await sb.auth.signInWithPassword({ email, password: mdp });
     if (error) throw error;
 
-    const p = await ouvrirSession();
+    diag.textContent = 'Étape 3/3 : lecture du profil…';
+    let p;
+    try { p = await ouvrirSession(); }
+    catch (x) { throw new Error('SERVEUR : ' + (x.message || x)); }
     if (!p || !p.actif) { await sb.auth.signOut(); throw new Error('NON_AUTORISE'); }
     if (p.role !== 'admin' && !p.etablissements.length) {
       await sb.auth.signOut(); throw new Error('SANS_ETAB');
@@ -118,23 +175,30 @@ $('f').onsubmit = async e => {
       etabId: p.etablissements[0] ? p.etablissements[0].id : null,
       duree, exp: Date.now() + duree
     });
-    location.replace(retour || ACCUEIL[p.role] || 'index.html');
+    const cible = retour || ACCUEIL[p.role] || 'index.html';
+    diag.textContent = 'Connexion réussie (' + p.role + '). Redirection vers ' + cible + '…';
+    location.replace(cible);
   } catch (x) {
     const m = x.message || String(x);
     const mauvais = m === 'INVALIDE' || x.code === 'invalid_credentials' || m.includes('Invalid login');
     if (mauvais) echec();
-    err.textContent =
-        m === 'NON_AUTORISE' ? 'Compte non autorisé. Contactez l\'administrateur.'
+    msg(
+        m === 'VIDE' ? 'Saisissez votre identifiant et votre mot de passe.'
+      : m === 'NON_AUTORISE' ? 'Compte non autorisé. Contactez l\'administrateur.'
       : m === 'SANS_ETAB' ? 'Aucun établissement ne vous est attribué. Contactez l\'administrateur.'
-      : m.startsWith('SERVEUR') ? m
+      : m.startsWith('SERVEUR') ? m + ' (vérifie que le SQL des fonctions a bien été exécuté)'
       : mauvais ? 'Identifiant ou mot de passe incorrect.'
       : (x.status === 429 || m.toLowerCase().includes('rate limit')) ? 'Trop de tentatives. Patientez quelques minutes.'
       : m.includes('fetch') ? 'Connexion impossible : vérifiez votre connexion Internet.'
-      : 'Erreur : ' + m;
+      : 'Erreur : ' + m
+    );
     $('m1').value = '';
     btn.disabled = false; btn.textContent = 'Se connecter';
     verrou();
   }
-};
+}
+btn.addEventListener('click', entrer);
+$('m1').addEventListener('keydown', e => { if (e.key === 'Enter') entrer(); });
+$('id').addEventListener('keydown', e => { if (e.key === 'Enter') $('m1').focus(); });
 </script>
 </body></html>
