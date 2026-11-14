@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Emploi du temps</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>.tb{width:100%;border-collapse:collapse;margin-top:12px}.tb th,.tb td{border:1px solid #000;padding:8px;text-align:left;font-size:.9rem;vertical-align:top}</style>
+</head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div>
+<div class="card">
+  <div id="ctx" style="font-size:.9rem;opacity:.8;margin-bottom:8px"></div>
+  <label>Classe</label><select id="classe"></select>
+</div>
+<div class="tabs">
+  <button id="mC" class="on" onclick="setM('C')">👥 Par classe</button>
+  <button id="mE" onclick="setM('E')">🧑‍🏫 Par enseignant</button>
+</div>
+<div class="card" id="bE" style="display:none"><label>Enseignant</label><select id="se" onchange="rList()"></select></div>
+
+<form class="card" id="fC" onsubmit="okC(event)">
+  <h2 id="tc">Ajouter un cours</h2>
+  <label>Jour *</label><select id="jr"></select>
+  <div class="g">
+    <div><label>Début *</label><input id="hd" type="time" required></div>
+    <div><label>Fin *</label><input id="hf" type="time" required></div>
+  </div>
+  <label>Matière *</label><input id="mt" list="dl" required autocomplete="off"><datalist id="dl"></datalist>
+  <label>Enseignant</label><select id="en"></select>
+  <label>Salle</label><input id="sl" autocomplete="off" placeholder="Ex : Salle 3">
+  <div class="acts"><button id="bok">Enregistrer</button><button type="button" class="sec" id="ca" style="display:none" onclick="annulerC()">Annuler</button></div>
+</form>
+
+<div class="tabs" id="chips"></div>
+<div id="lst"></div>
+<div class="card"><button class="sec" style="width:100%" onclick="imprimer()">🖨 Imprimer l'emploi du temps</button></div>
+</main>
+<div class="over" id="ov"></div>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant']);
+if (!C) throw new Error('Session requise');
+const ETAB = C.etabId;
+const CAN = ['admin', 'directeur', 'secretaire'].includes(C.role);   // modification de l'emploi du temps
+
+/* ---------- Outils ---------- */
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mess = x => (x && x.message) || String(x);
+const opts = (l, f) => l.map(x => `<option value="${esc(x.id)}">${esc(f(x))}</option>`).join('');
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const avertir = l => { const t = l.filter(x => x[0]).map(x => x[1]); if (t.length) erreur('Ajoutez d\'abord ' + t.join(' et ') + '.'); };
+const lire = async rq => { const { data, error } = await rq; if (error) throw error; return data || []; };
+const tout = async fab => { let out = [], de = 0; for (;;) { const l = await lire(fab(de, de + 999)); out = out.concat(l); if (l.length < 1000) break; de += 1000; } return out; };
+window.$ = $;
+
+/* ---------- État ---------- */
+const JL = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+let ANNEES = [], CLASSES = [], ENSL = [], MATS = [], H = [], ANNEE = '';
+let M = 'C', J = new Date().getDay() || 1, eid = null;
+const cid = () => $('classe').value;
+const cl = id => CLASSES.find(c => c.id === id);
+const optDe = c => (c && (c.option || c.option_faculte || c.faculte)) || '';
+const nomEns = id => { const p = ENSL.find(x => x.id === id); return p ? p.nom_complet : ''; };
+const versH = r => ({
+  id: r.id, classe: r.classe_id, jour: +r.jour,
+  debut: String(r.heure_debut).slice(0, 5), fin: String(r.heure_fin).slice(0, 5),
+  matiere: r.matiere, ens: r.personnel_id || '', salle: r.salle || ''
+});
+const chev = (a, b) => a.debut < b.fin && b.debut < a.fin;
+const sel = () => M === 'C' ? H.filter(h => h.classe === cid()) : H.filter(h => h.ens === $('se').value);
+
+function anneeCourante() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+/* ---------- Chargement ---------- */
+async function init() {
+  if (!ETAB) return erreur('Aucun établissement disponible.');
+  try {
+    ANNEES = await lire(sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }));
+    ANNEE = anneeCourante();
+    if (!ANNEE) return erreur('Créez d\'abord une année scolaire.');
+    const [classes, ens, mats, hor] = await Promise.all([
+      lire(sb.from('classes').select('*').eq('etablissement_id', ETAB)),
+      lire(sb.rpc('kalasa_enseignants', { p_etab: ETAB })),
+      lire(sb.from('matieres').select('nom, classe_id, personnel_id').eq('etablissement_id', ETAB)),
+      tout((a, b) => sb.from('horaires').select('*').eq('etablissement_id', ETAB).eq('annee_id', ANNEE).order('id').range(a, b))
+    ]);
+    CLASSES = classes.filter(c => c.annee_id == null || c.annee_id === ANNEE).map(c => ({ ...c, option: optDe(c) }));
+    ENSL = ens; MATS = mats; H = hor.map(versH);
+
+    $('ctx').textContent = '🏫 Année ' + ((ANNEES.find(a => a.id === ANNEE) || {}).lib || '');
+    $('classe').innerHTML = CLASSES.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option ? ' · ' + c.option : ''))}</option>`).join('')
+      || '<option value="">Aucune classe</option>';
+    avertir([[!CLASSES.length, '<a href="classe.html">des classes</a>']]);
+
+    $('fC').style.display = CAN ? 'block' : 'none';
+    rendu();
+    /* Enseignant : on affiche directement son propre emploi du temps */
+    if (!CAN) {
+      const mienne = ENSL.find(p => p.utilisateur_id === C.id);
+      if (mienne) { $('se').value = mienne.id; setM('E'); }
+    }
+  } catch (x) {
+    erreur('Lecture impossible : ' + esc(mess(x)) + ' (vérifiez que le SQL des horaires a bien été exécuté)');
+  }
+}
+
+function fill() {
+  const prio = new Set(MATS.filter(m => m.classe_id === cid()).map(m => m.personnel_id));
+  const l = ENSL.slice().sort((a, b) => (prio.has(b.id) ? 1 : 0) - (prio.has(a.id) ? 1 : 0));
+  $('en').innerHTML = '<option value="">— Aucun —</option>' + opts(l, p => p.nom_complet + (p.matiere ? ' · ' + p.matiere : ''));
+  const cur = $('se').value;
+  $('se').innerHTML = opts(ENSL, p => p.nom_complet);
+  if (cur && ENSL.some(p => p.id === cur)) $('se').value = cur;
+  $('dl').innerHTML = [...new Set(MATS.filter(m => m.classe_id === cid()).map(m => m.nom))].map(n => `<option value="${esc(n)}">`).join('');
+  $('jr').innerHTML = JL.slice(1).map((l, i) => `<option value="${i + 1}" ${J === i + 1 ? 'selected' : ''}>${l}</option>`).join('');
+}
+function rendu() { fill(); rList(); }
+function setM(m) {
+  M = m;
+  $('fC').style.display = m === 'C' && CAN ? 'block' : 'none';
+  $('bE').style.display = m === 'E' ? 'block' : 'none';
+  $('mC').className = m === 'C' ? 'on' : ''; $('mE').className = m === 'E' ? 'on' : '';
+  rList();
+}
+function setJ(j) { J = j; if (!eid) $('jr').value = j; rList(); }
+
+/* ---------- Ajout / modification ---------- */
+async function okC(ev) {
+  ev.preventDefault();
+  if (!CAN) return alert('Modification réservée à la direction et au secrétariat.');
+  if (!cid()) return alert('Choisissez une classe.');
+  const d = { classe: cid(), jour: +$('jr').value, debut: $('hd').value, fin: $('hf').value,
+    matiere: $('mt').value.trim(), ens: $('en').value, salle: $('sl').value.trim() };
+  if (d.fin <= d.debut) return alert('L\'heure de fin doit être après l\'heure de début.');
+
+  const autres = H.filter(h => h.id !== eid && h.jour === d.jour && chev(h, d));
+  const c1 = autres.find(h => h.classe === d.classe);
+  if (c1) return alert('Conflit : cette classe a déjà un cours de ' + c1.debut + ' à ' + c1.fin + ' (' + c1.matiere + ').');
+  const c2 = d.ens && autres.find(h => h.ens === d.ens);
+  if (c2) return alert('Conflit : cet enseignant donne déjà cours en ' + ((cl(c2.classe) || {}).nom || '—') + ' de ' + c2.debut + ' à ' + c2.fin + '.');
+  const c3 = d.salle && autres.find(h => (h.salle || '').toLowerCase() === d.salle.toLowerCase());
+  if (c3) return alert('Conflit : la salle « ' + d.salle + ' » est déjà occupée de ' + c3.debut + ' à ' + c3.fin + '.');
+
+  const ligne = { jour: d.jour, heure_debut: d.debut, heure_fin: d.fin, matiere: d.matiere,
+    personnel_id: d.ens || null, salle: d.salle || null };
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) {
+      const { data, error } = await sb.from('horaires').update(ligne).eq('id', eid).select('*').single();
+      if (error) throw error;
+      H = H.map(h => h.id === eid ? versH(data) : h);
+    } else {
+      const { data, error } = await sb.from('horaires')
+        .insert({ ...ligne, etablissement_id: ETAB, annee_id: ANNEE, classe_id: d.classe }).select('*').single();
+      if (error) throw error;
+      H.push(versH(data));
+    }
+    erreur(''); J = d.jour; annulerC(); rList();
+  } catch (x) {
+    if (x.code === '23P01') alert('Conflit d\'horaire détecté : classe, enseignant ou salle déjà occupé sur ce créneau.');
+    else erreur('Enregistrement impossible : ' + esc(mess(x)));
+  }
+  b.disabled = false;
+}
+function annulerC() {
+  ['hd', 'hf', 'mt', 'sl'].forEach(c => $(c).value = '');
+  $('en').value = ''; eid = null;
+  $('tc').textContent = 'Ajouter un cours'; $('ca').style.display = 'none'; $('jr').value = J;
+}
+function editCren(id) {
+  const h = H.find(x => x.id === id); if (!h) return;
+  $('jr').value = h.jour; $('hd').value = h.debut; $('hf').value = h.fin; $('mt').value = h.matiere;
+  $('en').value = h.ens; $('sl').value = h.salle || '';
+  eid = id; $('tc').textContent = 'Modifier le cours'; $('ca').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function delCren(id) {
+  if (!CAN) return;
+  if (!confirm('Supprimer ce cours ?')) return;
+  const { error } = await sb.from('horaires').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(mess(error)));
+  H = H.filter(h => h.id !== id); rList();
+}
+
+/* ---------- Affichage ---------- */
+function rList() {
+  $('chips').innerHTML = JL.slice(1).map((l, i) => `<button class="${J === i + 1 ? 'on' : ''}" onclick="setJ(${i + 1})">${l.slice(0, 3)}</button>`).join('');
+  const l = sel().filter(h => h.jour === J).sort((a, b) => a.debut.localeCompare(b.debut));
+  $('lst').innerHTML = l.length ? l.map(h => {
+    const p = nomEns(h.ens);
+    return `<div class="card el"><div class="info"><b>${h.debut} – ${h.fin} · ${esc(h.matiere)}</b>
+      <small>${p ? '🧑‍🏫 ' + esc(p) : ''}${h.salle ? ' · 🚪 ' + esc(h.salle) : ''}</small>
+      ${M === 'E' ? `<small>👥 ${esc((cl(h.classe) || {}).nom || '—')}</small>` : ''}</div>
+      ${M === 'C' && CAN ? `<div class="b"><button class="sec" onclick="editCren('${h.id}')">✎</button><button class="del" onclick="delCren('${h.id}')">✕</button></div>` : ''}</div>`;
+  }).join('') : `<p class="vide">Aucun cours le ${JL[J].toLowerCase()}</p>`;
+}
+
+function imprimer() {
+  const titre = M === 'C' ? 'Classe ' + ((cl(cid()) || {}).nom || '') : 'Enseignant : ' + nomEns($('se').value);
+  $('ov').innerHTML = `<div class="noprint acts"><button onclick="window.print()">🖨 Imprimer / PDF</button><button class="sec" onclick="$('ov').classList.remove('show')">Fermer</button></div>
+  <h2 style="text-align:center">EMPLOI DU TEMPS — ${esc(titre)}</h2>
+  <table class="tb">${JL.slice(1).map((j, i) => {
+    const l = sel().filter(h => h.jour === i + 1).sort((a, b) => a.debut.localeCompare(b.debut));
+    return `<tr><th>${j}</th><td>${l.map(h => `${h.debut}-${h.fin} <b>${esc(h.matiere)}</b>${M === 'E' ? ' (' + esc((cl(h.classe) || {}).nom || '') + ')' : ''}${h.salle ? ' · ' + esc(h.salle) : ''}`).join('<br>') || '—'}</td></tr>`;
+  }).join('')}</table>`;
+  $('ov').classList.add('show'); scrollTo(0, 0);
+}
+
+/* Fonctions appelées par les attributs onclick / onchange du HTML */
+Object.assign(window, { setM, setJ, okC, annulerC, editCren, delCren, rList, imprimer });
+
+$('classe').addEventListener('change', rendu);
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
