@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Messages</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.st3{display:grid;grid-template-columns:2fr 2fr 1fr;gap:6px;margin-top:10px}.st3 button{padding:10px 4px;font-size:.85rem}
+.rech{display:flex;gap:6px;align-items:stretch}.rech input{flex:1;min-width:0;margin:0}
+.rech .mic{flex:0 0 52px;width:52px;margin:0;padding:0;font-size:1.2rem}
+.rech .mic.on{background:#c0392b;color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.55}}
+#sel .card{cursor:pointer;margin:6px 0}#sel .card:active{opacity:.6}
+.warn{word-break:break-word}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div>
+<div class="card">
+  <div class="g"><div><label>Établissement</label><select id="etab"></select></div>
+  <div><label>Année scolaire</label><select id="annee"></select></div></div>
+  <label>Classe</label><select id="classe"></select>
+  <label>Indicatif pays pour WhatsApp (ex : 243)</label>
+  <input id="ind" inputmode="numeric" placeholder="Ex : 243">
+</div>
+<div class="tabs">
+  <button id="tE" data-t="E" class="on">✉ Écrire</button>
+  <button id="tA" data-t="A">🔔 Alertes</button>
+  <button id="tH" data-t="H">🕘 Historique</button>
+</div>
+
+<section id="pE">
+  <div class="card">
+    <label>Destinataires</label>
+    <select id="dest">
+      <option value="classe">Parents de la classe sélectionnée</option>
+      <option value="eleve">Parents d'un élève</option>
+      <option value="etab">Tous les parents (établissement et année)</option>
+      <option value="ens">Enseignants</option>
+      <option value="pers">Tout le personnel</option>
+    </select>
+    <div id="bel" style="display:none">
+      <label>Élève (matricule ou nom)</label>
+      <div class="rech">
+        <input id="qel" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tapez ou dictez le matricule / nom…">
+        <button type="button" id="mic" class="sec mic" title="Dictée vocale" aria-label="Dictée vocale">🎤</button>
+      </div>
+      <input type="hidden" id="eleve">
+      <div id="sel"></div>
+    </div>
+    <label>Modèle</label>
+    <select id="mod">
+      <option value="libre">Message libre</option><option value="reunion">Convocation à une réunion</option>
+      <option value="paiement">Rappel de paiement</option><option value="absence">Absence d'un élève</option>
+      <option value="felic">Félicitations</option><option value="conge">Avis de congé</option>
+    </select>
+    <label>Message</label><textarea id="txt" rows="6" placeholder="Écrivez votre message…"></textarea>
+    <small style="opacity:.7">Variables : {parent} {eleve} {classe} {ecole} {reste}</small>
+    <div class="acts"><button id="bprep">Préparer les envois</button></div>
+  </div>
+  <div id="dst"></div>
+</section>
+
+<section id="pA" style="display:none">
+  <div class="card"><label>Afficher</label>
+    <select id="af"><option value="">Toutes les alertes</option><option value="absence">Absents aujourd'hui</option><option value="paiement">Soldes impayés</option></select></div>
+  <div id="la"></div>
+</section>
+
+<section id="pH" style="display:none">
+  <div class="card"><div class="acts"><button class="sec" id="bexh">⬇ Exporter (CSV)</button><button class="del" id="bvid">🗑 Vider</button></div></div>
+  <div id="lh"></div>
+</section>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'caissier']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const DEV = localStorage.getItem('kalasa_devise') || 'USD';
+const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+/* Argent : visible uniquement par l'administrateur, le directeur et le caissier */
+const ARGENT = ['admin', 'directeur', 'caissier'].includes(C.role);
+const PEUT_VIDER = ['admin', 'directeur'].includes(C.role);
+
+const TPL = { libre: '',
+  reunion: "Bonjour {parent}, l'école {ecole} vous convie à une réunion des parents de la classe {classe}. Date : … Heure : … Lieu : … Votre présence est importante.",
+  paiement: "Bonjour {parent}, nous vous rappelons que le solde des frais scolaires de {eleve} ({classe}) est de {reste}. Merci de régulariser. — {ecole}",
+  absence: "Bonjour {parent}, {eleve} ({classe}) était absent(e) aujourd'hui. Merci de nous en indiquer le motif. — {ecole}",
+  felic: "Bonjour {parent}, l'école {ecole} félicite {eleve} pour ses bons résultats. Continuez à l'encourager !",
+  conge: "Chers parents, l'école {ecole} informe que les cours sont suspendus du … au … . Reprise le … ." };
+
+let ETABS = [], ANNEES = [], CLASSES = [], ELEVES = [], PARENTS = [], PERS = [], FR = [], PA = [], ABS = [], HIST = [], CIB = [], AL = [];
+const SENT = new Set();
+const nom = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
+const pn = p => [p.prenom, p.nom].filter(Boolean).join(' ');
+const cl = id => CLASSES.find(x => x.id === id) || {};
+const nE = id => (ETABS.find(x => x.id === id) || {}).nom || '';
+const cid = () => $('classe').value;
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const av = e => `<div class="av">${esc((e.prenom || e.nom || '?')[0].toUpperCase())}</div>`;
+
+async function toutLire(creer) {
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await creer().range(i, i + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+function anneeDefaut() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+/* ===== Chargement ===== */
+async function init() {
+  const [re, ra, rc] = await Promise.all([
+    sb.from('etablissements').select('id, nom').order('nom'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
+  ]);
+  const err = re.error || ra.error || rc.error;
+  if (err) return erreur('Lecture impossible : ' + esc(err.message));
+  ETABS = re.data || []; ANNEES = ra.data || []; CLASSES = rc.data || [];
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+  if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
+  $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('annee').value = anneeDefaut();
+  $('ind').value = localStorage.getItem('kalasa_ind') || '';
+  if (!ARGENT) { $('mod').querySelector('option[value=paiement]').remove(); $('af').querySelector('option[value=paiement]').remove(); }
+  remplirClasses();
+  await chargerDonnees();
+}
+function remplirClasses() {
+  const e = $('etab').value, a = $('annee').value, avant = cid();
+  const l = CLASSES.filter(c => c.etablissement_id === e && c.annee_id === a).sort((x, y) => String(x.nom).localeCompare(String(y.nom), 'fr', { numeric: true }));
+  $('classe').innerHTML = l.length ? l.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''))}</option>`).join('') : '<option value="">Aucune classe</option>';
+  if ([...$('classe').options].some(o => o.value === avant)) $('classe').value = avant;
+}
+async function chargerDonnees() {
+  const e = $('etab').value, a = $('annee').value;
+  ELEVES = []; PARENTS = []; PERS = []; FR = []; PA = []; ABS = []; HIST = []; CIB = []; AL = [];
+  if (e && a) {
+    try {
+      const [rel, rpar, rper, rh] = await Promise.all([
+        toutLire(() => sb.from('inscriptions').select('id, matricule, nom, postnom, prenom, classe_id').eq('etablissement_id', e).eq('annee_id', a).order('nom')),
+        sb.from('parents').select('id, nom, postnom, prenom, tel, parent_eleves(inscription_id)').eq('etablissement_id', e),
+        sb.from('personnel').select('id, nom, postnom, prenom, fonction, telephone').eq('etablissement_id', e).order('nom'),
+        sb.from('messages_envoyes').select('*').eq('etablissement_id', e).order('date_envoi', { ascending: false }).limit(300)
+      ]);
+      ELEVES = rel;
+      PARENTS = (rpar.data || []).map(p => ({ ...p, eleves: (p.parent_eleves || []).map(x => x.inscription_id) }));
+      PERS = rper.data || [];
+      HIST = rh.data || [];
+      if (ARGENT) {
+        [FR, PA] = await Promise.all([
+          toutLire(() => sb.from('frais').select('id, classe_id, montant').eq('etablissement_id', e).eq('annee_id', a)),
+          toutLire(() => sb.from('paiements').select('inscription_id, montant').eq('etablissement_id', e).eq('annee_id', a))
+        ]);
+      }
+      const ra2 = await sb.from('presences').select('inscription_id, classe_id').eq('etablissement_id', e).eq('date_appel', today()).eq('statut', 'A');
+      if (!ra2.error) ABS = ra2.data || [];
+      erreur(!PARENTS.length ? 'Enregistrez d\'abord <a href="parent.html">des parents</a>.' : '');
+    } catch (x) { erreur('Lecture impossible : ' + esc(x.message || x)); }
+  }
+  rendu();
+}
+function rendu() { majDest(); rAlert(); rHist(); }
+
+/* ===== Montants ===== */
+function reste(e) {
+  const du = FR.filter(f => !f.classe_id || f.classe_id === e.classe_id).reduce((s, f) => s + +f.montant, 0);
+  const pa = PA.filter(p => p.inscription_id === e.id).reduce((s, p) => s + +p.montant, 0);
+  return du - pa;
+}
+
+/* ===== Destinataires ===== */
+function tab(t) {
+  ['E', 'A', 'H'].forEach(x => { $('p' + x).style.display = x === t ? 'block' : 'none'; $('t' + x).className = x === t ? 'on' : ''; });
+  if (t === 'A') rAlert(); if (t === 'H') rHist();
+}
+function majDest() {
+  const v = $('dest').value === 'eleve';
+  $('bel').style.display = v ? 'block' : 'none';
+  if (REC && ECOUTE) REC.stop();
+  $('eleve').value = ''; $('qel').value = ''; $('sel').innerHTML = '';
+  if (v) setTimeout(() => $('qel').focus(), 60);
+}
+const mat = e => String(e.matricule || '');
+function rechEleve(auto) {
+  $('eleve').value = '';
+  const q = norm($('qel').value).trim();
+  if (!q) { $('sel').innerHTML = ''; return; }
+  const mots = q.split(/\s+/);
+  const r = ELEVES.filter(e => { const h = norm([mat(e), e.nom, e.postnom, e.prenom].join(' ')); return mots.every(m => h.includes(m)); })
+    .sort((a, b) => (norm(mat(b)) === q) - (norm(mat(a)) === q) || nom(a).localeCompare(nom(b))).slice(0, 8);
+  if (auto && r.length === 1) return choisirEleve(r[0].id);
+  $('sel').innerHTML = r.length ? r.map(e => `<div class="card" data-el="${esc(e.id)}"><div class="el">${av(e)}
+    <div class="info"><b>${esc(nom(e))}</b><small>${esc(mat(e) || '—')} · ${esc(cl(e.classe_id).nom || '')}</small></div></div></div>`).join('')
+    : '<p class="vide">Aucun élève trouvé</p>';
+}
+function choisirEleve(id) {
+  const e = ELEVES.find(x => x.id === id); if (!e) return;
+  $('eleve').value = id;
+  $('qel').value = nom(e) + (mat(e) ? ' · ' + mat(e) : '');
+  $('sel').innerHTML = `<small class="bon">✔ ${esc(nom(e))} sélectionné</small>`;
+  CIB = []; $('dst').innerHTML = '';
+}
+
+/* ===== Dictée vocale (Web Speech API, français) ===== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition; let REC = null, ECOUTE = false;
+if (!SR) $('mic').style.display = 'none';
+function finDictee() { ECOUTE = false; $('mic').classList.remove('on'); $('qel').placeholder = 'Tapez ou dictez le matricule / nom…'; }
+function dicter() {
+  if (!SR) return alert('La dictée vocale n\'est pas disponible sur ce navigateur. Utilisez Chrome ou Safari récent.');
+  if (ECOUTE) { REC.stop(); return; }
+  REC = new SR(); REC.lang = 'fr-FR'; REC.interimResults = true; REC.continuous = false; REC.maxAlternatives = 1;
+  REC.onstart = () => { ECOUTE = true; $('mic').classList.add('on'); $('qel').placeholder = '🎤 Parlez maintenant…'; };
+  REC.onresult = ev => {
+    let t = Array.from(ev.results).map(r => r[0].transcript).join(' ');
+    t = t.replace(/[.,;:!?]/g, ' ').replace(/(\d)\s+(?=\d)/g, '$1').replace(/\s+/g, ' ').trim();
+    $('qel').value = t; rechEleve(ev.results[ev.results.length - 1].isFinal);
+  };
+  REC.onerror = ev => { finDictee();
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') alert('Accès au micro refusé. Autorisez le micro dans les réglages du navigateur.');
+    else if (ev.error === 'network') alert('La dictée vocale nécessite une connexion Internet.');
+    else if (ev.error === 'no-speech') $('qel').placeholder = 'Rien entendu, réessayez…'; };
+  REC.onend = finDictee;
+  try { REC.start(); } catch (e) { finDictee(); }
+}
+const chargerModele = () => { $('txt').value = TPL[$('mod').value]; };
+
+/* ===== Envoi (le message s'ouvre dans WhatsApp / SMS ; l'envoi est enregistré dans l'historique) ===== */
+function num(t) {
+  const n = String(t || '').replace(/[^\d+]/g, '');
+  if (n.startsWith('+')) return n.slice(1); if (n.startsWith('00')) return n.slice(2);
+  const ind = $('ind').value.replace(/\D/g, ''); return n.startsWith('0') && ind ? ind + n.slice(1) : n;
+}
+function perso(t, c) {
+  const e = c.e;
+  return t.split('{parent}').join(c.nom).split('{eleve}').join(e ? [e.prenom, e.nom].filter(Boolean).join(' ') : '')
+    .split('{classe}').join(e ? cl(e.classe_id).nom || '' : '').split('{ecole}').join(nE($('etab').value))
+    .split('{reste}').join(e && ARGENT ? fmt(Math.max(0, reste(e))) : '');
+}
+function envoyer(c, texte, canal, sk) {
+  if (!c.tel) return alert('Aucun numéro enregistré.');
+  const u = canal === 'wa' ? 'https://wa.me/' + num(c.tel) + '?text=' + encodeURIComponent(texte)
+    : canal === 'sms' ? 'sms:' + c.tel + '?body=' + encodeURIComponent(texte) : 'tel:' + c.tel;
+  if (canal === 'wa') window.open(u, '_blank'); else location.href = u;      // d'abord le lien (geste de l'utilisateur)
+  if (canal !== 'tel') {
+    SENT.add(sk);
+    sb.from('messages_envoyes').insert({ etablissement_id: $('etab').value, canal, destinataire: c.nom, tel: c.tel, texte, utilisateur_id: C.id })
+      .select().single().then(r => { if (r.error) erreur('Message ouvert, mais non enregistré dans l\'historique : ' + esc(r.error.message));
+        else { HIST.unshift(r.data); rHist(); } });
+  }
+  rDst(); rAlert();
+}
+const btns = (fn, i) => `<div class="st3"><button class="sec" data-fn="${fn}" data-i="${i}" data-c="wa">💬 WhatsApp</button><button class="sec" data-fn="${fn}" data-i="${i}" data-c="sms">✉ SMS</button><button class="sec" data-fn="${fn}" data-i="${i}" data-c="tel">📞</button></div>`;
+
+function cibles() {
+  const d = $('dest').value, out = [];
+  const parentsDe = els => {
+    const vus = new Set();
+    els.forEach(e => PARENTS.filter(p => (p.eleves || []).includes(e.id)).forEach(p => { if (!vus.has(p.id)) { vus.add(p.id); out.push({ tel: p.tel, nom: pn(p), e, p }); } }));
+  };
+  if (d === 'classe') parentsDe(ELEVES.filter(e => e.classe_id === cid()));
+  else if (d === 'eleve') { const e = ELEVES.find(x => x.id === $('eleve').value); if (e) parentsDe([e]); }
+  else if (d === 'etab') parentsDe(ELEVES);
+  else PERS.filter(p => d === 'pers' || p.fonction === 'Enseignant').forEach(p => out.push({ tel: p.telephone, nom: pn(p), e: null, p }));
+  return out;
+}
+function preparer() {
+  if (!$('txt').value.trim()) return alert('Écrivez un message.');
+  if ($('dest').value === 'eleve' && !$('eleve').value) return alert('Sélectionnez un élève dans la liste.');
+  CIB = cibles(); [...SENT].filter(k => k[0] === 'e').forEach(k => SENT.delete(k)); rDst();
+}
+function rDst() {
+  $('dst').innerHTML = CIB.length ? `<div class="card"><b>${CIB.length}</b> destinataire(s)<br><small style="opacity:.8">Aperçu : ${esc(perso($('txt').value, CIB[0]))}</small></div>` +
+    CIB.map((c, i) => `<div class="card"><div class="info"><b>${esc(c.nom)}</b><small>📞 ${esc(c.tel || '—')}${c.e ? ' · ' + esc(c.e.prenom + ' ' + c.e.nom) : ''}</small>
+      ${SENT.has('e' + i) ? '<small class="bon">✔ envoyé</small>' : ''}</div>${btns('bt', i)}</div>`).join('')
+    : '<p class="vide">Aucun destinataire trouvé (vérifiez que les parents sont enregistrés)</p>';
+}
+
+/* ===== Alertes ===== */
+function rAlert() {
+  AL = [];
+  const parent1 = e => { const p = PARENTS.find(x => (x.eleves || []).includes(e.id)); return { tel: p ? p.tel : '', nom: p ? pn(p) : 'Parent', e, p }; };
+  ABS.forEach(r => { const e = ELEVES.find(x => x.id === r.inscription_id); if (e) AL.push({ type: 'absence', c: parent1(e), txt: "Absent aujourd'hui" }); });
+  if (ARGENT) ELEVES.map(e => ({ e, r: reste(e) })).filter(x => x.r > 0).sort((a, b) => b.r - a.r)
+    .forEach(x => AL.push({ type: 'paiement', c: parent1(x.e), txt: 'Solde dû : ' + fmt(x.r) }));
+  const f = $('af').value, v = AL.map((a, i) => ({ a, i })).filter(x => !f || x.a.type === f);
+  $('la').innerHTML = v.length ? v.map(({ a, i }) => `<div class="card"><div class="el">${av(a.c.e)}<div class="info"><b>${esc(nom(a.c.e))}</b>
+    <small>${esc(cl(a.c.e.classe_id).nom || '')} · ${a.type === 'absence' ? '❌' : '💰'} ${esc(a.txt)}</small>
+    <small>${a.c.p ? '👤 ' + esc(a.c.nom) + ' · ' + esc(a.c.tel) : 'Aucun parent enregistré'}</small>
+    ${SENT.has('a' + i) ? '<small class="bon">✔ prévenu</small>' : ''}</div></div>${a.c.p ? btns('ba', i) : ''}</div>`).join('')
+    : '<p class="vide">Aucune alerte 🎉</p>';
+}
+
+/* ===== Historique ===== */
+function rHist() {
+  $('bvid').style.display = PEUT_VIDER ? '' : 'none';
+  $('lh').innerHTML = HIST.length ? HIST.slice(0, 100).map(h => `<div class="card"><b>${esc(h.destinataire)}</b> · ${esc({ wa: 'WhatsApp', sms: 'SMS' }[h.canal] || h.canal)}
+    <small style="display:block;opacity:.7">${new Date(h.date_envoi).toLocaleString('fr-FR')}</small><div style="margin-top:6px;font-size:.9rem">${esc(h.texte)}</div></div>`).join('')
+    : '<p class="vide">Aucun message envoyé</p>';
+}
+async function viderH() {
+  if (!PEUT_VIDER) return alert('Accès non autorisé.');
+  if (!confirm('Vider tout l\'historique de cet établissement ?')) return;
+  const { error } = await sb.from('messages_envoyes').delete().eq('etablissement_id', $('etab').value);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  HIST = []; rHist();
+}
+function expH() {
+  if (!HIST.length) return alert('Rien à exporter');
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const t = '\ufeff' + [['Date', 'Canal', 'Destinataire', 'Téléphone', 'Message'].join(';'),
+    ...HIST.map(h => [h.date_envoi, h.canal, h.destinataire, h.tel, h.texte].map(q).join(';'))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'historique_messages.csv'; a.click();
+}
+
+/* ===== Événements ===== */
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => tab(b.dataset.t)));
+$('ind').addEventListener('change', () => localStorage.setItem('kalasa_ind', $('ind').value));
+$('dest').addEventListener('change', majDest);
+$('qel').addEventListener('input', () => rechEleve(false)); $('qel').addEventListener('focus', () => rechEleve(false));
+$('qel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); rechEleve(true); } });
+$('mic').addEventListener('click', dicter);
+$('sel').addEventListener('click', e => { const c = e.target.closest('[data-el]'); if (c) choisirEleve(c.dataset.el); });
+$('mod').addEventListener('change', chargerModele);
+$('bprep').addEventListener('click', preparer);
+$('af').addEventListener('change', rAlert);
+$('bexh').addEventListener('click', expH); $('bvid').addEventListener('click', viderH);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-fn]'); if (!b) return;
+  const i = +b.dataset.i, canal = b.dataset.c;
+  if (b.dataset.fn === 'bt') { const c = CIB[i]; if (c) envoyer(c, perso($('txt').value, c), canal, 'e' + i); }
+  else { const a = AL[i]; if (a) envoyer(a.c, perso(TPL[a.type], a.c), canal, 'a' + i); }
+});
+$('etab').addEventListener('change', async () => { remplirClasses(); await chargerDonnees(); });
+$('annee').addEventListener('change', async () => { remplirClasses(); await chargerDonnees(); });
+
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
