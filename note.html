@@ -129,13 +129,14 @@ window.KAUDIT = { log: auditer };
 /* ---------- État ---------- */
 let ANNEES = [], CLASSES = [], INS = [], MAT = [], ENSL = [], VER = {}, N = {};
 let ETAB_ROW = {}, ANNEE = '', eid = null, T = 'M';
+let MES_FICHES = new Set();   // fiches Personnel reliées au compte connecté
 const cid = () => $('classe').value;
 const cl = id => CLASSES.find(c => c.id === id);
 const elevesDe = id => INS.filter(e => e.classe_id === id);
 const optDe = c => (c && (c.option || c.option_faculte || c.faculte)) || '';
-const versMat = r => ({ id: r.id, classe: r.classe_id, nom: r.nom, coef: +r.coef, max: +r.note_max, ens: r.enseignant_id });
+const versMat = r => ({ id: r.id, classe: r.classe_id, nom: r.nom, coef: +r.coef, max: +r.note_max, ens: r.personnel_id });
 const mats = () => MAT.filter(m => m.classe === cid());
-const peutNoter = m => !!m && (GERE || (ENS && m.ens === C.id));
+const peutNoter = m => !!m && (GERE || (ENS && MES_FICHES.has(m.ens)));
 const matsSaisie = () => mats().filter(peutNoter);
 const ouverte = p => !(VER[p] || {}).ferme;
 const dispo = () => { const c = cl(cid()); return !!c && BULLETIN.estDisponible(c); };
@@ -192,10 +193,11 @@ async function init() {
     CLASSES = classes.filter(c => c.annee_id == null || c.annee_id === ANNEE)
       .map(c => ({ ...c, option: optDe(c), type: c.type || c.niveau || '' }));
     INS = insc; MAT = matieres.map(versMat); ENSL = ens; ETAB_ROW = etabs[0] || {};
+    MES_FICHES = new Set(ENSL.filter(p => p.utilisateur_id === C.id).map(p => p.id));
     VER = {}; verrous.forEach(v => { VER[v.periode] = { ferme: v.ferme, par: v.par, le: v.le }; });
 
     $('ctx').textContent = '🏫 ' + (ETAB_ROW.nom || '') + ' · Année ' + ((ANNEES.find(a => a.id === ANNEE) || {}).lib || '');
-    const visibles = ENS ? CLASSES.filter(c => MAT.some(m => m.classe === c.id && m.ens === C.id)) : CLASSES;
+    const visibles = ENS ? CLASSES.filter(c => MAT.some(m => m.classe === c.id && MES_FICHES.has(m.ens))) : CLASSES;
     $('classe').innerHTML = visibles.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option ? ' · ' + c.option : ''))}</option>`).join('')
       || '<option value="">Aucune classe</option>';
     avertir([[!CLASSES.length, '<a href="classe.html">des classes</a>'], [!INS.length, '<a href="eleve.html">des élèves</a>']]);
@@ -203,7 +205,8 @@ async function init() {
     $('tP').style.display = GERE ? '' : 'none';
     let m = '';
     if (!GERE && !ENS) m = '⚠ Profil en lecture seule.';
-    else if (ENS && !MAT.some(x => x.ens === C.id)) m = '⚠ Aucune matière ne vous est attribuée : demandez à la direction de vous l\'attribuer.';
+    else if (ENS && !MES_FICHES.size) m = '⚠ Aucune fiche Personnel n\'est reliée à votre compte : demandez à la direction de relier votre fiche à votre compte utilisateur.';
+    else if (ENS && !MAT.some(x => MES_FICHES.has(x.ens))) m = '⚠ Aucune matière ne vous est attribuée : demandez à la direction de vous l\'attribuer.';
     if (m) { $('wr').style.display = 'block'; $('wr').textContent = m; }
 
     await chargerNotes();
@@ -222,7 +225,12 @@ async function okMat(e) {
   if (!d.ens) return alert('Attribuez cette matière à un enseignant.');
   const dbl = mats().find(x => x.id !== eid && cle1(x.nom) === cle1(d.nom));
   if (dbl) return alert('Refusé : « ' + dbl.nom + ' » existe déjà dans cette classe' + (dbl.ens ? ' (attribuée à ' + nomEns(dbl.ens) + ')' : '') + '. Une matière ne peut être attribuée qu\'à un seul enseignant.');
-  const ligne = { nom: d.nom, coef: d.coef, note_max: d.max, enseignant_id: d.ens };
+  const P = ENSL.find(x => x.id === d.ens);
+  if (!P) return alert('Enseignant introuvable pour cet établissement.');
+  const liste = String(P.matiere || '').split(/[,;\/]/).map(cle1).filter(Boolean), n = cle1(d.nom);
+  if (liste.length && !liste.some(x => n.includes(x) || x.includes(n)))
+    return alert('Refusé : « ' + d.nom + ' » ne figure pas dans les matières enseignées par ' + P.nom_complet + ' (fiche Personnel).');
+  const ligne = { nom: d.nom, coef: d.coef, note_max: d.max, personnel_id: d.ens };
   try {
     if (eid) {
       const { error } = await sb.from('matieres').update(ligne).eq('id', eid);
@@ -261,13 +269,14 @@ async function delMat(id) {
 const nomEns = id => { const p = ENSL.find(x => x.id === id); return p ? p.nom_complet : ''; };
 function rEns() {
   const c = $('me').value;
-  $('me').innerHTML = '<option value="">— Choisir l\'enseignant —</option>' + ENSL.map(p => `<option value="${esc(p.id)}">${esc(p.nom_complet)}</option>`).join('');
+  $('me').innerHTML = '<option value="">— Choisir l\'enseignant —</option>' +
+    ENSL.map(p => `<option value="${esc(p.id)}">${esc(p.nom_complet)}${p.matiere ? ' · ' + esc(p.matiere) : ''}</option>`).join('');
   $('me').value = c;
 }
 function rMat() {
   $('fm').style.display = GERE ? '' : 'none'; rEns();
   const l = GERE ? mats() : matsSaisie();
-  const aide = GERE && !ENSL.length ? '<p class="vide">Aucun enseignant : créez d\'abord un compte « enseignant » (page Utilisateurs) rattaché à cet établissement.</p>' : '';
+  const aide = GERE && !ENSL.length ? '<p class="vide">Aucun enseignant : ajoutez-en dans la page <a href="personnel.html">Personnel</a> pour cet établissement.</p>' : '';
   $('lm').innerHTML = aide + (l.length ? l.map(m => `<div class="card el"><div class="info"><b>${esc(m.nom)}</b><small>Coef ${m.coef} · sur ${m.max} · 👤 ${esc(nomEns(m.ens) || 'Non attribué')}</small></div>
     ${GERE ? `<div class="b"><button class="sec" onclick="editMat('${m.id}')">✎</button><button class="del" onclick="delMat('${m.id}')">✕</button></div>` : ''}</div>`).join('') :
     `<p class="vide">${GERE ? 'Aucune matière pour cette classe' : 'Aucune matière ne vous est attribuée dans cette classe : la direction doit vous l\'attribuer'}</p>`);
