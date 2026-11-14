@@ -4,6 +4,7 @@
 <title>KALASA — Utilisateurs</title>
 <link rel="stylesheet" href="kalasa.css">
 <style>
+.chk label{display:flex;gap:8px;align-items:center;margin:6px 0;font-size:.95rem;opacity:1}
 .el{display:flex;justify-content:space-between;align-items:center;gap:8px}.el small{display:block;opacity:.75;margin-top:2px}
 .tag{display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:99px;background:#16a34a;color:#fff;margin-left:6px}
 .tag.off{background:#8886}
@@ -35,6 +36,7 @@
   <button style="width:100%;margin-top:6px" id="bok">Créer le compte</button>
   <div class="ok" id="ok"></div>
 </form>
+<p class="err" id="err2" role="alert"></p>
 <div id="liste"></div>
 </main>
 
@@ -51,7 +53,26 @@ const cle = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300
 const normM = m => String(m || '').replace(/\s+/g, '').toUpperCase();
 const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
 
-let SANS = [], AVEC = [];
+let SANS = [], AVEC = [], PROF = {};
+
+function genererMdp() {
+  const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const v = new Uint32Array(12); crypto.getRandomValues(v);
+  return [...v].map(x => a[x % a.length]).join('');
+}
+
+async function appeler(fonction, corps) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Session expirée : reconnectez-vous.');
+  const r = await fetch(SUPABASE_URL + '/functions/v1/' + fonction, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify(corps)
+  });
+  let j = {}; try { j = await r.json(); } catch (_) {}
+  if (!r.ok) throw new Error(j.message || ('Erreur ' + r.status));
+  return j;
+}
 
 function maj() {
   const h = $('hn'), n = $('nom');
@@ -61,13 +82,8 @@ function maj() {
     : '✖ Ce nom n\'est pas dans la liste du personnel sans compte.';
 }
 
-function genererMdp() {
-  const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const v = new Uint32Array(12); crypto.getRandomValues(v);
-  return [...v].map(x => a[x % a.length]).join('');
-}
-
 async function charger() {
+  $('err2').textContent = '';
   const { data, error } = await sb.from('personnel')
     .select('id, matricule, nom, postnom, prenom, fonction, etablissement_id, utilisateur_id').order('nom');
   if (error) { $('err').textContent = 'Lecture impossible : ' + error.message; return; }
@@ -77,18 +93,85 @@ async function charger() {
   $('lp').innerHTML = SANS.map(x => `<option value="${esc(nomDe(x))}">${esc(x.fonction)} · ${esc(nomEtab(x.etablissement_id))}</option>`).join('');
   maj();
 
-  let prof = {};
+  PROF = {};
   if (AVEC.length) {
     const r = await sb.from('profils').select('id, identifiant, role, actif').in('id', AVEC.map(x => x.utilisateur_id));
-    if (!r.error) (r.data || []).forEach(p => prof[p.id] = p);
+    if (!r.error) (r.data || []).forEach(p => PROF[p.id] = p);
   }
+  rendu();
+}
+
+function rendu() {
   $('liste').innerHTML = AVEC.length ? AVEC.map(x => {
-    const p = prof[x.utilisateur_id];
+    const p = PROF[x.utilisateur_id], moi = x.utilisateur_id === C.id;
+    const off = p && p.actif === false;
     return `<div class="card el"><div>
-      <b>${esc(nomDe(x))}</b>${p ? (p.actif === false ? '<span class="tag off">Désactivé</span>' : '<span class="tag">Actif</span>') : ''}
+      <b>${esc(nomDe(x))}</b>${p ? (off ? '<span class="tag off">Désactivé</span>' : '<span class="tag">Actif</span>') : ''}
       <small>${p ? '@' + esc(p.identifiant) + ' · ' + esc(ROLES[p.role] || p.role) : 'Compte lié'} · 🔗 ${esc(x.matricule)}</small>
-      <small>🏫 ${esc(nomEtab(x.etablissement_id))}</small></div></div>`;
+      <small>🏫 ${esc(nomEtab(x.etablissement_id))}</small></div>
+      <div class="b">
+        <button class="sec" title="Nouveau mot de passe" data-a="mdp" data-id="${esc(x.utilisateur_id)}">🔑</button>
+        <button class="sec" title="Établissements autorisés" data-a="etabs" data-id="${esc(x.utilisateur_id)}">🏫</button>
+        ${moi || !p ? '' : `<button class="sec" title="Activer / désactiver" data-a="actif" data-id="${esc(x.utilisateur_id)}">${off ? '▶' : '⏸'}</button>`}
+        ${moi ? '' : `<button class="del" title="Supprimer" data-a="supp" data-id="${esc(x.utilisateur_id)}">✕</button>`}
+      </div></div>`;
   }).join('') : '<p style="text-align:center;opacity:.6">Aucun compte lié au personnel</p>';
+}
+
+const fiche = id => AVEC.find(x => x.utilisateur_id === id);
+
+async function actionMdp(id) {
+  const x = fiche(id); if (!x) return;
+  const n = prompt('Nouveau mot de passe pour ' + nomDe(x) + ' (10 caractères minimum).\nLaissez vide pour en générer un automatiquement :');
+  if (n === null) return;
+  const mdp = n === '' ? genererMdp() : n;
+  if (mdp.length < 10) return alert('Mot de passe trop court (10 caractères minimum).');
+  try {
+    await appeler('gerer-utilisateurs', { action: 'mot_de_passe', user_id: id, mot_de_passe: mdp });
+    alert('Mot de passe modifié.\nNouveau mot de passe : ' + mdp + '\nNotez-le maintenant.');
+  } catch (e) { alert(e.message); }
+}
+
+async function actionActif(id) {
+  const x = fiche(id), p = PROF[id]; if (!x || !p) return;
+  const actif = p.actif === false;
+  if (!actif && !confirm('Désactiver le compte de ' + nomDe(x) + ' ?')) return;
+  try {
+    await appeler('gerer-utilisateurs', { action: 'activer', user_id: id, actif });
+    await charger();
+  } catch (e) { $('err2').textContent = e.message; }
+}
+
+async function actionSupp(id) {
+  const x = fiche(id); if (!x) return;
+  if (!confirm('Supprimer le compte de ' + nomDe(x) + ' ? La fiche du personnel est conservée.')) return;
+  try {
+    await appeler('gerer-utilisateurs', { action: 'supprimer', user_id: id });
+    await charger();
+  } catch (e) { $('err2').textContent = e.message; }
+}
+
+async function actionEtabs(id) {
+  const x = fiche(id); if (!x) return;
+  const { data, error } = await sb.from('utilisateur_etablissements').select('etablissement_id').eq('utilisateur_id', id);
+  if (error) { $('err2').textContent = 'Lecture des établissements impossible : ' + error.message; return; }
+  const actuels = (data || []).map(r => r.etablissement_id);
+  const d = document.createElement('dialog');
+  d.style.cssText = 'border:0;border-radius:14px;padding:18px;width:min(92vw,340px);background:var(--c,#fff);color:var(--t,#1b2430)';
+  d.innerHTML = `<h3 style="margin:0 0 8px">🏫 ${esc(nomDe(x))}</h3><div class="chk">` +
+    (ETABS.map(e => `<label><input type="checkbox" value="${esc(e.id)}" ${actuels.includes(e.id) ? 'checked' : ''}> ${esc(e.nom || e.code)}</label>`).join('') || '<small>Aucun établissement</small>') +
+    `</div><p class="err" id="ee"></p><div style="display:flex;gap:8px;margin-top:8px"><button id="eo" style="flex:1">Enregistrer</button><button class="sec" id="ea" style="flex:1">Annuler</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  d.addEventListener('close', () => d.remove());
+  d.querySelector('#ea').onclick = () => d.close();
+  d.querySelector('#eo').onclick = async () => {
+    const liste = [...d.querySelectorAll('input:checked')].map(i => i.value);
+    if (!liste.length) { d.querySelector('#ee').textContent = 'Choisissez au moins un établissement.'; return; }
+    try {
+      await appeler('gerer-utilisateurs', { action: 'etablissements', user_id: id, etablissements: liste });
+      d.close();
+    } catch (e) { d.querySelector('#ee').textContent = e.message; }
+  };
 }
 
 async function creer(ev) {
@@ -105,21 +188,13 @@ async function creer(ev) {
     const F = l.filter(x => normM(x.matricule) === m);
     if (!F.length) throw new Error('Refusé : ce numéro matricule ne correspond pas à « ' + nom + ' ».');
     if (F.length > 1) throw new Error('Plusieurs fiches correspondent (établissements différents). Contactez le support.');
-    const fiche = F[0];
-    if (role === 'enseignant' && fiche.fonction !== 'Enseignant') throw new Error('Refusé : dans la liste du personnel, ' + nomDe(fiche) + ' est « ' + fiche.fonction + ' », pas « Enseignant ».');
+    const f = F[0];
+    if (role === 'enseignant' && f.fonction !== 'Enseignant') throw new Error('Refusé : dans la liste du personnel, ' + nomDe(f) + ' est « ' + f.fonction + ' », pas « Enseignant ».');
     if (login.length < 3) throw new Error('Identifiant trop court (3 caractères minimum).');
     if (mdp.length < 10) throw new Error('Mot de passe trop court (10 caractères minimum).');
 
     b.disabled = true; b.textContent = 'Création…';
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Session expirée : reconnectez-vous.');
-    const r = await fetch(SUPABASE_URL + '/functions/v1/creer-utilisateurs-v3', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ personnel_id: fiche.id, identifiant: login, mot_de_passe: mdp, role })
-    });
-    let j = {}; try { j = await r.json(); } catch (_) {}
-    if (r.status !== 201) throw new Error(j.message || ('Erreur ' + r.status));
+    await appeler('creer-utilisateurs-v3', { personnel_id: f.id, identifiant: login, mot_de_passe: mdp, role });
 
     ok.innerHTML = '✔ Compte créé.<br>Identifiant : <b>' + esc(login) + '</b><br>Mot de passe : <b>' + esc(mdp) +
       '</b><br>Notez-les maintenant : le mot de passe ne sera plus affichable.';
@@ -133,6 +208,14 @@ async function creer(ev) {
 $('nom').addEventListener('input', maj);
 $('gen').addEventListener('click', () => { $('mdp').value = genererMdp(); });
 $('f').addEventListener('submit', creer);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  const id = b.dataset.id;
+  if (b.dataset.a === 'mdp') actionMdp(id);
+  if (b.dataset.a === 'etabs') actionEtabs(id);
+  if (b.dataset.a === 'actif') actionActif(id);
+  if (b.dataset.a === 'supp') actionSupp(id);
+});
 await charger();
 </script>
 </body></html>
