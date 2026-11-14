@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KALASA — Classes</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.el{justify-content:space-between;gap:8px}
+.el small{display:block;opacity:.75;margin-top:2px}
+.warn{word-break:break-word}
+</style></head>
+
+<body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div>
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouvelle classe</h2>
+
+  <label>Établissement *</label>
+  <select id="etab"></select>
+
+  <label>Année scolaire *</label>
+  <select id="annee"></select>
+
+  <label>Niveau/Dégré</label>
+  <select id="type"></select>
+
+  <label>Nom de la classe * (ex : 1er A ou 1er HP)</label>
+  <input id="nom" autocomplete="off">
+
+  <!-- Visible et accessible uniquement si Niveau = Humanité ou Université -->
+  <div id="blocOption">
+    <label>Option / Faculté</label>
+    <input id="option" placeholder="Ex : Pédagogie générale" disabled autocomplete="off">
+  </div>
+
+  <!-- Toujours visible, quel que soit le niveau (liste remplie depuis bulletin-modele.js) -->
+  <label>Modèle de bulletin</label>
+  <select id="modeleBul"></select>
+
+  <div class="g">
+    <div><label>Titulaire</label><input id="titulaire" list="lt" autocomplete="off"><datalist id="lt"></datalist></div>
+    <div><label>Effectif max</label><input id="max" type="number" min="1" inputmode="numeric"></div>
+  </div>
+
+  <div class="acts">
+    <button id="bok">Enregistrer</button>
+    <button type="button" class="sec" id="ann" style="display:none">Annuler</button>
+  </div>
+</form>
+
+<div class="card"><label>Filtrer par année</label><select id="filtre"></select></div>
+<div id="liste"></div>
+</main>
+
+<script src="bulletin-modele.js"></script>
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant']);
+const GERE = ['admin', 'directeur', 'secretaire'].includes(C.role);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MODELES = (window.BULLETIN && window.BULLETIN.MODELES) || {};
+
+/* Niveaux : mêmes que etablissement.html. Pour AJOUTER un niveau : l'ajouter ici et dans etablissement.html. */
+const NIV = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Cycle terminal', 'Humanité', 'Université'];
+const AVEC_OPTION = ['Humanité', 'Université'];   // niveaux qui ont une Option / Faculté
+const DEF_TYPE = 'Terminal';
+
+let ETABS = [], ANNEES = [], L = [], eid = null;
+const nomE = id => (ETABS.find(e => e.id === id) || {}).nom || '—';
+const nomA = id => (ANNEES.find(a => a.id === id) || {}).lib || '—';
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+
+function anneeDefaut() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+/* ===== Niveaux autorisés selon l'établissement choisi ===== */
+function typesPermis() {
+  const e = ETABS.find(x => x.id === $('etab').value);
+  return e && e.niveaux && e.niveaux.length ? e.niveaux : NIV;
+}
+/* `sel` = valeur à conserver (une valeur hors liste est gardée pour ne rien perdre) */
+function majTypes(sel) {
+  const p = typesPermis(), v = sel || $('type').value;
+  const liste = (!v || p.includes(v)) ? p : [...p, v];
+  $('type').innerHTML = liste.map(t => `<option>${esc(t)}</option>`).join('');
+  $('type').value = liste.includes(v) ? v : (p.includes(DEF_TYPE) ? DEF_TYPE : p[0]);
+  majOption();
+}
+/* Option / Faculté : visible + modifiable seulement pour « Humanité » ou « Université » */
+function majOption() {
+  const t = $('type').value, h = AVEC_OPTION.includes(t);
+  $('blocOption').style.display = h ? 'block' : 'none';
+  $('option').disabled = !h;
+  $('option').placeholder = t === 'Université' ? 'Ex : Faculté de Droit' : 'Ex : Pédagogie générale';
+  if (!h) $('option').value = '';
+}
+
+/* Suggestions de titulaires : enseignants du personnel de l'établissement (saisie libre possible) */
+async function chargerTitulaires() {
+  $('lt').innerHTML = '';
+  const e = $('etab').value; if (!e) return;
+  const r = await sb.from('personnel').select('nom, postnom, prenom').eq('etablissement_id', e).eq('fonction', 'Enseignant').order('nom');
+  if (r.error) return;   // les rôles sans accès au personnel gardent la saisie libre
+  $('lt').innerHTML = (r.data || []).map(x => `<option value="${esc([x.nom, x.postnom, x.prenom].filter(Boolean).join(' '))}">`).join('');
+}
+
+async function init() {
+  $('modeleBul').innerHTML = '<option value="">Aucun (bulletin indisponible)</option>' +
+    Object.entries(MODELES).map(([k, m]) => `<option value="${esc(k)}">${esc(m.label)} (${esc(m.ref)})</option>`).join('');
+
+  const [re, ra] = await Promise.all([
+    sb.from('etablissements').select('id, nom, niveaux').order('nom'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false })
+  ]);
+  if (re.error || ra.error) return erreur('Lecture impossible : ' + esc((re.error || ra.error).message));
+  ETABS = re.data || []; ANNEES = ra.data || [];
+
+  const m = [];
+  if (!ETABS.length) m.push('<a href="etablissement.html">un établissement</a>');
+  if (!ANNEES.length) m.push('<a href="annee.html">une année scolaire</a>');
+  if (m.length) erreur('Créez d\'abord ' + m.join(' et ') + '.');
+
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+  if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
+  const ad = anneeDefaut();
+  $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('annee').value = ad;
+  $('filtre').innerHTML = '<option value="">Toutes les années</option>' +
+    ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('filtre').value = ad;
+  majTypes(DEF_TYPE);
+  chargerTitulaires();
+  if (!GERE) $('f').style.display = 'none';
+  await charger();
+}
+
+async function charger() {
+  const { data, error } = await sb.from('classes').select('*').order('nom');
+  if (error) { erreur('Lecture des classes impossible : ' + esc(error.message)); L = []; }
+  else L = data || [];
+  rendu();
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  if (!$('etab').value || !$('annee').value) return alert('Sélectionnez un établissement et une année scolaire.');
+  const nom = $('nom').value.trim();
+  if (!nom) { $('nom').focus(); return alert('Le nom de la classe est obligatoire.'); }
+
+  const avecOption = AVEC_OPTION.includes($('type').value);
+  const d = {
+    etablissement_id: $('etab').value,
+    annee_id: $('annee').value,
+    type: $('type').value,
+    nom,
+    option_faculte: avecOption ? $('option').value.trim() : '',   // vide si le niveau n'a pas d'option / faculté
+    modele_bulletin: $('modeleBul').value || null,                // vide = bulletin indisponible
+    titulaire: $('titulaire').value.trim() || null,
+    effectif_max: +$('max').value || null
+  };
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) { const { error } = await sb.from('classes').update(d).eq('id', eid); if (error) throw error; }
+    else { const { error } = await sb.from('classes').insert(d); if (error) throw error; }
+    reinit(); await charger();
+  } catch (x) {
+    erreur(x.code === '23505' ? 'Cette classe existe déjà pour cet établissement et cette année.' : 'Enregistrement impossible : ' + esc(x.message || x));
+  }
+  b.disabled = false;
+}
+
+function reinit() {
+  ['nom', 'option', 'titulaire', 'max'].forEach(c => $(c).value = '');
+  $('modeleBul').value = '';
+  $('annee').value = anneeDefaut();
+  eid = null;
+  majTypes(DEF_TYPE);
+  $('t').textContent = 'Nouvelle classe';
+  $('ann').style.display = 'none';
+}
+
+function modifier(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  $('etab').value = x.etablissement_id;
+  $('annee').value = x.annee_id;
+  majTypes(x.type);
+  $('nom').value = x.nom;
+  $('option').value = x.option_faculte || '';
+  $('modeleBul').value = x.modele_bulletin || '';
+  $('titulaire').value = x.titulaire || '';
+  $('max').value = x.effectif_max || '';
+  eid = id;
+  $('t').textContent = 'Modifier la classe';
+  $('ann').style.display = 'block';
+  chargerTitulaires();
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function supprimer(id) {
+  erreur('');
+  if (!confirm('Supprimer cette classe ?')) return;
+  const { error } = await sb.from('classes').delete().eq('id', id);
+  if (error) return erreur(error.code === '23503'
+    ? 'Suppression impossible : des élèves sont inscrits dans cette classe.'
+    : 'Suppression impossible : ' + esc(error.message));
+  await charger();
+}
+
+function rendu() {
+  const f = $('filtre').value;
+  const t = L.filter(c => !f || c.annee_id === f);
+  $('liste').innerHTML = t.length ? t.map(c => {
+    const mb = c.modele_bulletin && MODELES[c.modele_bulletin];
+    return `<div class="card el"><div><b>${esc(c.nom)}</b>${c.option_faculte ? ' · ' + esc(c.option_faculte) : ''}
+  <small>🎓 ${esc(c.type || '—')}</small>
+  ${mb ? `<small>📄 Bulletin : ${esc(mb.label)} (${esc(mb.ref)})</small>` : ''}
+  <small>🏫 ${esc(nomE(c.etablissement_id))} · 📅 ${esc(nomA(c.annee_id))}</small>
+  ${c.titulaire ? `<small>👤 Titulaire : ${esc(c.titulaire)}</small>` : ''}
+  ${c.effectif_max ? `<small>🧒 Effectif max : ${c.effectif_max}</small>` : ''}</div>
+  ${GERE ? `<div class="b"><button class="sec" data-a="m" data-id="${esc(c.id)}">✎</button><button class="del" data-a="s" data-id="${esc(c.id)}">✕</button></div>` : ''}</div>`;
+  }).join('') : '<p style="text-align:center;opacity:.6">Aucune classe</p>';
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('ann').addEventListener('click', reinit);
+$('etab').addEventListener('change', () => { majTypes(); chargerTitulaires(); });
+$('type').addEventListener('change', majOption);
+$('filtre').addEventListener('change', rendu);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  if (b.dataset.a === 'm') modifier(b.dataset.id);
+  if (b.dataset.a === 's') supprimer(b.dataset.id);
+});
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
