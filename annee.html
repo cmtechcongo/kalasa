@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KALASA — Années scolaires</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.el{justify-content:space-between;gap:8px}
+.el small{display:block;opacity:.75;margin-top:2px}
+.tag{display:inline-block;background:#16a34a;color:#fff;border-radius:20px;padding:2px 8px;font-size:.7rem;margin-left:6px}
+</style></head>
+
+<body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn" style="word-break:break-word"></div>
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouvelle année scolaire</h2>
+  <label>Libellé * (ex : 2026-2027)</label><input id="lib" placeholder="2026-2027" autocomplete="off">
+  <div class="g">
+    <div><label>Date de début *</label><input id="debut" type="date"></div>
+    <div><label>Date de fin *</label><input id="fin" type="date"></div>
+  </div>
+  <div class="acts"><button id="bok">Enregistrer</button><button type="button" class="sec" id="ann" style="display:none">Annuler</button></div>
+</form>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+await exigerSession(['admin', 'directeur']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = d => d ? String(d).split('-').reverse().join('/') : '';
+let L = [], eid = null;
+
+const erreur = t => { const w = $('warn'); w.textContent = t; w.style.display = t ? 'block' : 'none'; };
+
+async function charger() {
+  const { data, error } = await sb.from('annees_scolaires').select('*').order('debut', { ascending: false });
+  if (error) { erreur('Lecture impossible : ' + error.message); L = []; }
+  else { erreur(''); L = data || []; }
+  rendu();
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  const d = { lib: $('lib').value.trim(), debut: $('debut').value, fin: $('fin').value };
+  if (!d.lib || !d.debut || !d.fin) return alert('Remplissez le libellé et les deux dates.');
+  if (d.fin <= d.debut) return alert('La date de fin doit être après la date de début.');
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) {
+      const { error } = await sb.from('annees_scolaires').update(d).eq('id', eid);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from('annees_scolaires').insert({ ...d, active: L.length === 0 });
+      if (error) throw error;
+    }
+    reinit(); await charger();
+  } catch (x) {
+    erreur(x.code === '23505' ? 'Une année porte déjà ce libellé.' : 'Enregistrement impossible : ' + (x.message || x));
+  }
+  b.disabled = false;
+}
+
+function reinit() {
+  ['lib', 'debut', 'fin'].forEach(c => $(c).value = '');
+  eid = null; $('t').textContent = 'Nouvelle année scolaire'; $('ann').style.display = 'none';
+}
+
+function modifier(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  $('lib').value = x.lib; $('debut').value = x.debut; $('fin').value = x.fin;
+  eid = id; $('t').textContent = 'Modifier'; $('ann').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function activer(id) {
+  erreur('');
+  const { error } = await sb.rpc('kalasa_activer_annee', { p_id: id });
+  if (error) return erreur('Activation impossible : ' + error.message);
+  await charger();
+}
+
+async function supprimer(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  if (!confirm('Supprimer l\'année ' + x.lib + ' ?')) return;
+  erreur('');
+  const { error } = await sb.from('annees_scolaires').delete().eq('id', id);
+  if (error) return erreur(error.code === '23503'
+    ? 'Suppression impossible : des classes ou des élèves sont liés à cette année.'
+    : 'Suppression impossible : ' + error.message);
+  const reste = L.filter(e => e.id !== id);
+  if (x.active && reste.length) await sb.rpc('kalasa_activer_annee', { p_id: reste[0].id });   // la plus récente devient active
+  await charger();
+}
+
+function rendu() {
+  $('liste').innerHTML = L.length ? L.map(a => `
+  <div class="card el"><div><b>${esc(a.lib)}</b>${a.active ? '<span class="tag">Active</span>' : ''}
+  <small>${fmt(a.debut)} → ${fmt(a.fin)}</small></div>
+  <div class="b">${a.active ? '' : `<button data-a="a" data-id="${esc(a.id)}">Activer</button>`}
+  <button class="sec" data-a="m" data-id="${esc(a.id)}">✎</button><button class="del" data-a="s" data-id="${esc(a.id)}">✕</button></div></div>`).join('')
+  : '<p style="text-align:center;opacity:.6">Aucune année scolaire</p>';
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('ann').addEventListener('click', reinit);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  if (b.dataset.a === 'a') activer(b.dataset.id);
+  if (b.dataset.a === 'm') modifier(b.dataset.id);
+  if (b.dataset.a === 's') supprimer(b.dataset.id);
+});
+await charger();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
