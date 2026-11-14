@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Frais & Caisse</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.bar{height:6px;background:#8883;border-radius:3px;margin-top:8px}
+.bar i{display:block;height:6px;border-radius:3px;transition:width .4s}
+.tot{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;font-size:.75rem;gap:4px}
+.tot b{display:block;font-size:1rem}
+.rc table{width:100%;border-collapse:collapse;margin:12px 0}
+.rc td{border:1px solid #000;padding:8px;color:#000}
+.detail-frais .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px}
+.detail-frais .fr{border:1px solid #8883;border-radius:8px;padding:10px}
+.detail-frais .fr b{display:block;font-size:1rem}
+.detail-frais .fr small{opacity:.75;font-size:.75rem}
+.caisse{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center}
+.caisse>div{border-radius:10px;padding:14px;font-size:.8rem}
+.caisse b{display:block;font-size:1.3rem;margin-bottom:4px}
+.ent{background:#16a34a22;color:#166534}.sor{background:#dc262622;color:#991b1b}.sol{background:#2563eb22;color:#1e40af}
+.filtres{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
+#pmatInfo{min-height:1.2em;padding:2px 4px;font-size:.8rem}
+.recent{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.recent button{background:#2563eb15;border:1px solid #2563eb40;color:inherit;border-radius:99px;padding:4px 10px;font-size:.75rem;min-height:0}
+.recent small{opacity:.6;font-size:.7rem;display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.stats>div{border:1px solid #8883;border-radius:10px;padding:10px;text-align:center;font-size:.75rem}
+.stats b{display:block;font-size:1.25rem;margin-bottom:2px}
+.stats .ok b{color:#16a34a}.stats .mid b{color:#f59e0b}.stats .ko b{color:#dc2626}
+.tl{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:10px}
+.tl th,.tl td{border-bottom:1px solid #8883;padding:6px;text-align:left}
+.tl .n{text-align:right;white-space:nowrap}
+.el{justify-content:space-between;gap:8px}.el small{display:block;opacity:.75;margin-top:2px}
+.warn{word-break:break-word}
+.tabs{flex-wrap:wrap}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div>
+
+<div class="card">
+  <div class="g">
+    <div><label>Établissement</label><select id="etab"></select></div>
+    <div><label>Année scolaire</label><select id="annee"></select></div>
+  </div>
+  <div id="blocClasse"><label>Classe</label><select id="classe"></select></div>
+</div>
+
+<div class="tabs">
+  <button id="tF" data-t="F" class="on">💲 Frais</button>
+  <button id="tP" data-t="P">💵 Paiement</button>
+  <button id="tS" data-t="S">📊 Situation</button>
+  <button id="tD" data-t="D">🧾 Dépenses</button>
+  <button id="tC" data-t="C">💼 Caisse</button>
+  <button id="tR" data-t="R">👔 Salaire</button>
+</div>
+
+<!-- FRAIS -->
+<section id="pF">
+  <form class="card" id="fF" novalidate>
+    <h2 id="tf">Nouveau frais</h2>
+    <label>Libellé *</label><input id="fl" placeholder="Ex : Minerval 1er trimestre" autocomplete="off">
+    <div class="g">
+      <div><label>Montant *</label><input id="fm" type="number" min="0" step="any" inputmode="decimal"></div>
+      <div><label>Devise</label><input id="dev" placeholder="USD, FC, EUR…"></div>
+    </div>
+    <label>S'applique à</label><select id="fc"></select>
+    <div class="acts"><button>Enregistrer</button><button type="button" class="sec" id="fa" style="display:none">Annuler</button></div>
+  </form>
+  <div id="lf"></div>
+</section>
+
+<!-- PAIEMENT -->
+<section id="pP" style="display:none">
+  <form class="card" id="fP" novalidate>
+    <h2>Enregistrer un paiement</h2>
+    <label>Recherche rapide (matricule ou nom)</label>
+    <input id="psearch" placeholder="Tapez un matricule ou un nom…" autocomplete="off">
+    <div id="psearchInfo" style="font-size:.8rem;min-height:1.2em;padding:2px 4px"></div>
+    <div id="recentBox" style="margin-top:8px"></div>
+    <div class="g" style="margin-top:10px">
+      <div><label>Matricule *</label><input id="pmat" placeholder="Ex : 2026-0001" autocomplete="off"></div>
+      <div><label>Élève *</label><select id="pe"></select></div>
+    </div>
+    <div id="pmatInfo"></div>
+    <label>Frais *</label><select id="pf"></select>
+    <div class="g">
+      <div><label>Montant *</label><input id="pm" type="number" min="0.01" step="any" inputmode="decimal"></div>
+      <div><label>Date *</label><input id="pd" type="date"></div>
+    </div>
+    <div class="g">
+      <div><label>Mode</label><select id="pmo"><option>Espèces</option><option>Mobile Money</option><option>Banque</option><option>Autre</option></select></div>
+      <div><label>Référence</label><input id="pr" placeholder="N° transaction" autocomplete="off"></div>
+    </div>
+    <div class="acts"><button id="bpay">Enregistrer et générer le reçu</button></div>
+  </form>
+  <div id="hist"></div>
+</section>
+
+<!-- SITUATION -->
+<section id="pS" style="display:none">
+  <div class="card" id="statsClasse"></div>
+  <div class="card tot" id="tot"></div>
+  <div class="card detail-frais" id="detailFrais"></div>
+  <div class="card">
+    <h3>Liste soldés / non soldés</h3>
+    <div class="filtres">
+      <div><label>Classe</label><select id="lstClasse"></select></div>
+      <div><label>Frais</label><select id="lstFrais"></select></div>
+      <div><label>Statut</label><select id="lstStatut">
+        <option value="">Tous</option><option value="S">Soldés</option><option value="P">Partiels</option><option value="I">Impayés</option></select></div>
+      <div><button class="sec" type="button" id="bimpl">🖨 Imprimer</button></div>
+    </div>
+    <div id="lstResultat"></div>
+  </div>
+  <div class="card">
+    <label>Filtrer la situation globale</label>
+    <select id="sf"><option value="">Tous</option><option value="I">Impayés</option><option value="P">Paiements partiels</option><option value="S">Soldés</option></select>
+    <div class="acts">
+      <button class="sec" type="button" id="bexs">⬇ Situation (CSV)</button>
+      <button class="sec" type="button" id="bexp">⬇ Paiements (CSV)</button>
+      <button class="sec" type="button" id="bpds">📄 Situation (PDF)</button>
+    </div>
+  </div>
+  <div id="ls"></div>
+</section>
+
+<!-- DÉPENSES -->
+<section id="pD" style="display:none">
+  <form class="card" id="fD" novalidate>
+    <h2>Nouvelle dépense</h2>
+    <label>Motif *</label><input id="dm" placeholder="Ex : Achat craies, facture électricité…" autocomplete="off">
+    <div class="g">
+      <div><label>Montant *</label><input id="dmt" type="number" min="0.01" step="any"></div>
+      <div><label>Date *</label><input id="dd" type="date"></div>
+    </div>
+    <div class="g">
+      <div><label>Compte source</label><select id="dc"></select></div>
+      <div><label>Mode</label><select id="dmo"><option>Espèces</option><option>Mobile Money</option><option>Banque</option><option>Autre</option></select></div>
+    </div>
+    <label>Bénéficiaire / Référence</label><input id="dref" placeholder="Nom ou n° facture" autocomplete="off">
+    <div class="acts"><button>Enregistrer la dépense</button></div>
+  </form>
+  <div class="card">
+    <h3>Période</h3>
+    <div class="filtres">
+      <div><label>Du</label><input type="date" id="d1"></div>
+      <div><label>Au</label><input type="date" id="d2"></div>
+      <div><button class="sec" type="button" id="bpdd">📄 Rapport PDF</button></div>
+    </div>
+    <p id="totDep" style="margin-top:10px;font-weight:600"></p>
+  </div>
+  <div id="ld"></div>
+</section>
+
+<!-- CAISSE -->
+<section id="pC" style="display:none">
+  <div class="card">
+    <h3>Période de caisse</h3>
+    <div class="filtres">
+      <div><label>Du</label><input type="date" id="c1"></div>
+      <div><label>Au</label><input type="date" id="c2"></div>
+      <div><button class="sec" type="button" id="bpdc">📄 Rapport de caisse (PDF)</button></div>
+    </div>
+  </div>
+  <div class="card caisse" id="blocCaisse"></div>
+  <div class="card"><h3>Détail des mouvements</h3><div id="mvtCaisse"></div></div>
+</section>
+
+<!-- SALAIRE : rempli par finance-salaire.js -->
+<section id="pR" style="display:none"><p class="vide">Module salaire non installé.</p></section>
+</main>
+<div class="over" id="ov"></div>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+import { esc, enteteHtml, signaturesHtml, ouvrirImpression, entetePdf, signaturesPdf } from './kalasa-doc.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'caissier']);
+const $ = i => document.getElementById(i);
+const role = C.role;
+
+/* ===== Droits d'action ===== */
+const DROITS = {
+  admin: ['frais', 'paiement', 'depense', 'caisse', 'salaire', 'export'],
+  directeur: ['depense', 'caisse', 'salaire', 'export'],
+  caissier: ['paiement', 'depense', 'caisse', 'salaire', 'export'],
+  secretaire: ['export']
+};
+const peut = a => (DROITS[role] || []).includes(a);
+
+/* ===== Outils ===== */
+let DEV = localStorage.getItem('kalasa_devise') || 'USD';
+const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+const fmtP = n => fmt(n).replace(/[\u202f\u00a0]/g, ' ');
+const fmtD = d => d ? String(d).split('-').reverse().join('/') : '';
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const nom = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
+const txtSel = id => $(id)?.selectedOptions?.[0]?.text || '';
+const pct = (a, b) => b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0;
+const inRange = (d, a, b) => (!a || d >= a) && (!b || d <= b);
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const pdfDispo = () => !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable);
+const qrUrl = t => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(t)}`;
+function empreinte(recu, montant, date, ref) {
+  let h = 0; const s = recu + '|' + montant + '|' + date + '|' + ref;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+}
+async function toutLire(creer) {
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await creer().range(i, i + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+async function prochainRecu(table, prefixe, an, etab) {
+  const pre = prefixe + '-' + an + '-';
+  const { data, error } = await sb.from(table).select('recu').eq('etablissement_id', etab).like('recu', pre + '%').order('recu', { ascending: false }).limit(1);
+  if (error) throw error;
+  const n = data && data[0] ? (+String(data[0].recu).split('-').pop() || 0) : 0;
+  return pre + String(n + 1).padStart(5, '0');
+}
+function csv(nomF, rows) {
+  const t = '\ufeff' + rows.map(r => r.map(c => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
+  a.download = nomF + '.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ===== Données ===== */
+let ETABS = [], ANNEES = [], CLASSES = [], ELEVES = [], FR = [], PA = [], DEP = [], fid = null;
+let PAE = new Map(), PAEF = new Map();
+const etabCourant = () => ETABS.find(x => x.id === $('etab').value) || { nom: '', adresse: '' };
+const cl = id => CLASSES.find(x => x.id === id) || {};
+function indexer() {
+  PAE = new Map(); PAEF = new Map();
+  PA.forEach(p => {
+    PAE.set(p.inscription_id, (PAE.get(p.inscription_id) || 0) + +p.montant);
+    const k = p.inscription_id + '|' + p.frais_id; PAEF.set(k, (PAEF.get(k) || 0) + +p.montant);
+  });
+}
+const paidE = e => PAE.get(e.id) || 0;
+const paidF = (e, f) => PAEF.get(e.id + '|' + f.id) || 0;
+const fraisDe = e => FR.filter(f => !f.classe_id || f.classe_id === e.classe_id);
+const dueE = e => fraisDe(e).reduce((s, f) => s + +f.montant, 0);
+const statutE = e => { const d = dueE(e), p = paidE(e); return d > 0 && p >= d ? 'S' : p > 0 ? 'P' : 'I'; };
+const LIB_ST = { S: '✅ Soldé', P: '🟠 Partiel', I: '🔴 Impayé' };
+const classesPortee = () => CLASSES.filter(c => c.etablissement_id === $('etab').value && c.annee_id === $('annee').value)
+  .sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr', { numeric: true }));
+const cid = () => $('classe').value;
+const SEL = () => { const v = $('classe').value; return v === '*' ? '' : v; };
+const elevesPortee = sel => ELEVES.filter(e => !sel || e.classe_id === sel);
+const elevesDe = c => ELEVES.filter(e => e.classe_id === c).sort((a, b) => nom(a).localeCompare(nom(b), 'fr'));
+const opts = (arr, f) => arr.map(x => `<option value="${esc(x.id)}">${esc(f(x))}</option>`).join('');
+
+/* ===== Contexte partagé avec le module salaire ===== */
+const CTX = { sb, C, $, esc, fmt, fmtP, fmtD, today, peut, txtSel, etabCourant, csv, pdfTable, afficherRecu, qrUrl, empreinte,
+  prochainRecu, toutLire, erreur, SAL: [], salCharger: null, salRender: null, rCaisse: () => rCaisse(),
+  etabId: () => $('etab').value, anneeId: () => $('annee').value };
+window.KFIN = CTX;
+
+/* ===== PDF avec en-tête ===== */
+function pdfTable(titre, head, body, foot) {
+  if (!pdfDispo()) return alert('PDF indisponible : connexion requise pour charger jsPDF.');
+  const d = new window.jspdf.jsPDF();
+  const y0 = entetePdf(d, etabCourant(), titre, txtSel('annee'));
+  d.autoTable({ head: [head], body, foot: foot ? [foot] : undefined, startY: y0, styles: { fontSize: 8 },
+    headStyles: { fillColor: [37, 99, 235] }, footStyles: { fillColor: [100, 100, 100] } });
+  signaturesPdf(d, (d.lastAutoTable || {}).finalY || y0,
+    [{ titre: 'Établi par', nom: C.nom_complet }, { titre: "Le chef d'établissement", nom: etabCourant().chef || '' }]);
+  d.save(titre.replace(/[^\w]+/g, '_') + '.pdf');
+}
+
+/* ===== Reçu (fenêtre) : en-tête + contenu + signatures ===== */
+function afficherRecu(corps, titre, texteShare) {
+  const ov = $('ov');
+  ov.innerHTML = `<div style="max-width:460px;margin:16px auto">
+    <div class="rc" id="rcBox" style="background:#fff;color:#000;padding:16px;border-radius:12px">${corps}</div>
+    <div class="acts" style="margin-top:10px"><button id="rcP">🖨 Imprimer</button><button class="sec" id="rcS">📤 Partager</button><button class="sec" id="rcF">Fermer</button></div></div>`;
+  ov.style.cssText = 'display:block;position:fixed;inset:0;background:#000b;overflow:auto;z-index:100';
+  $('rcF').onclick = () => { ov.style.display = 'none'; ov.innerHTML = ''; };
+  $('rcP').onclick = () => ouvrirImpression($('rcBox').innerHTML, titre);
+  $('rcS').onclick = () => {
+    if (navigator.share) navigator.share({ title: titre, text: texteShare }).catch(() => {});
+    else window.open('https://wa.me/?text=' + encodeURIComponent(texteShare), '_blank');
+  };
+}
+
+/* ===== Chargement ===== */
+async function init() {
+  const [re, ra, rc] = await Promise.all([
+    sb.from('etablissements').select('id, nom, adresse, telephone, chef').order('nom'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
+  ]);
+  const err = re.error || ra.error || rc.error;
+  if (err) return erreur('Lecture impossible : ' + esc(err.message));
+  ETABS = re.data || []; ANNEES = ra.data || []; CLASSES = rc.data || [];
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+  if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
+  $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  $('annee').value = ANNEES.some(a => a.id === k) ? k : ((ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '');
+  $('dev').value = DEV; $('pd').value = today(); $('dd').value = today();
+  if (!ETABS.length || !ANNEES.length) erreur('Créez d\'abord un établissement et une année scolaire.');
+  appliquerDroits(); remplirClasses();
+  await chargerDonnees();
+  const premier = ['F', 'P', 'S', 'D', 'C', 'R'].find(x => $('t' + x).style.display !== 'none') || 'S';
+  tab(premier);
+  import('./finance-salaire.js').then(m => m.init(CTX)).catch(() => {});
+}
+async function chargerDonnees() {
+  const e = $('etab').value, a = $('annee').value;
+  ELEVES = []; FR = []; PA = []; DEP = [];
+  if (e && a) {
+    try {
+      [ELEVES, FR, PA, DEP] = await Promise.all([
+        toutLire(() => sb.from('inscriptions').select('id, matricule, nom, postnom, prenom, sexe, classe_id').eq('etablissement_id', e).eq('annee_id', a).order('nom')),
+        toutLire(() => sb.from('frais').select('*').eq('etablissement_id', e).eq('annee_id', a).order('date_creation')),
+        toutLire(() => sb.from('paiements').select('*').eq('etablissement_id', e).eq('annee_id', a).order('date_paiement')),
+        toutLire(() => sb.from('depenses').select('*').eq('etablissement_id', e).eq('annee_id', a).order('date_depense', { ascending: false }))
+      ]);
+      erreur('');
+    } catch (x) { erreur('Lecture impossible : ' + esc(x.message || x)); }
+  }
+  indexer();
+  if (CTX.salCharger) await CTX.salCharger();
+  rendu();
+}
+function appliquerDroits() {
+  const on = { F: peut('frais'), P: peut('paiement'), S: true, D: peut('depense'), C: peut('caisse'), R: peut('salaire') };
+  Object.entries(on).forEach(([x, ok]) => { $('t' + x).style.display = ok ? '' : 'none'; if (!ok) $('p' + x).style.display = 'none'; });
+}
+function remplirClasses() {
+  const l = classesPortee(), avant = $('classe').value;
+  $('classe').innerHTML = l.length ? opts(l, c => c.nom + (c.option_faculte ? ' · ' + c.option_faculte : '')) : '<option value="">Aucune classe</option>';
+  if ([...$('classe').options].some(o => o.value === avant)) $('classe').value = avant;
+  optToutes($('pS').style.display !== 'none');
+}
+function optToutes(on) {
+  const s = $('classe'), ex = s.querySelector('option[data-all]');
+  if (on && !ex) { const o = document.createElement('option'); o.value = '*'; o.textContent = '🏫 Toutes les classes'; o.dataset.all = '1'; s.insertBefore(o, s.firstChild); }
+  if (!on && ex) { const etait = s.value === '*'; ex.remove(); if (etait) { s.selectedIndex = 0; s.dispatchEvent(new Event('change')); } }
+}
+function tab(t) {
+  optToutes(t === 'S');
+  $('blocClasse').style.display = t === 'R' ? 'none' : '';
+  ['F', 'P', 'S', 'D', 'C', 'R'].forEach(x => { $('p' + x).style.display = x === t ? 'block' : 'none'; $('t' + x).className = x === t ? 'on' : ''; });
+  if (t === 'S') { rSit(); rListe(); }
+  if (t === 'D') { rDepCompte(); rDep(); }
+  if (t === 'C') rCaisse();
+  if (t === 'P') { afficherRecents(); $('psearch').focus(); }
+  if (t === 'R' && CTX.salRender) CTX.salRender();
+}
+function rendu() {
+  $('fc').innerHTML = '<option value="">Toutes les classes de l\'établissement</option>' + opts(classesPortee(), c => c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''));
+  rF(); fillPe(); rPay(); rListeFrais(); rDepCompte(); rSit(); rListe(); rDep(); rCaisse(); afficherRecents();
+  if (CTX.salRender) CTX.salRender();
+}
+
+/* ===== FRAIS ===== */
+async function okF(ev) {
+  ev.preventDefault();
+  if (!peut('frais')) return alert('Accès non autorisé.');
+  const e = $('etab').value, a = $('annee').value;
+  if (!e || !a) return alert('Choisissez un établissement et une année.');
+  const d = { lib: $('fl').value.trim(), montant: +$('fm').value };
+  if (!d.lib || !(d.montant >= 0) || $('fm').value === '') return alert('Remplissez le libellé et le montant.');
+  const r = fid ? await sb.from('frais').update(d).eq('id', fid)
+    : await sb.from('frais').insert({ ...d, etablissement_id: e, annee_id: a, classe_id: $('fc').value || null });
+  if (r.error) return erreur('Enregistrement impossible : ' + esc(r.error.message));
+  resetF(); await chargerDonnees();
+}
+function resetF() { $('fl').value = ''; $('fm').value = ''; fid = null; $('tf').textContent = 'Nouveau frais'; $('fa').style.display = 'none'; }
+function editF(id) {
+  if (!peut('frais')) return alert('Accès non autorisé.');
+  const f = FR.find(x => x.id === id); if (!f) return;
+  $('fl').value = f.lib; $('fm').value = f.montant; fid = id;
+  $('tf').textContent = 'Modifier (le montant s\'applique à tous les élèves concernés)';
+  $('fa').style.display = 'block'; scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function delF(id) {
+  if (!peut('frais')) return alert('Accès non autorisé.');
+  if (PA.some(p => p.frais_id === id)) return alert('Suppression impossible : des paiements existent pour ce frais.');
+  if (!confirm('Supprimer ce frais ?')) return;
+  const { error } = await sb.from('frais').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  await chargerDonnees();
+}
+function rF() {
+  $('lf').innerHTML = FR.length ? FR.map(f => `<div class="card el"><div class="info"><b>${esc(f.lib)}</b>
+    <small>${fmt(f.montant)} · ${f.classe_id ? esc(cl(f.classe_id).nom || '—') : 'Toutes les classes'}</small></div>
+    ${peut('frais') ? `<div class="b"><button class="sec" data-act="ef" data-id="${esc(f.id)}">✎</button><button class="del" data-act="df" data-id="${esc(f.id)}">✕</button></div>` : ''}</div>`).join('')
+    : '<p class="vide">Aucun frais défini pour cet établissement et cette année</p>';
+}
+
+/* ===== PAIEMENTS ===== */
+function fillPe() { $('pe').innerHTML = opts(elevesDe(cid()), e => nom(e) + ' (' + e.matricule + ')'); }
+function rPay() {
+  const e = ELEVES.find(x => x.id === $('pe').value);
+  if (!e) { $('pf').innerHTML = ''; $('hist').innerHTML = '<p class="vide">Aucun élève</p>'; return; }
+  const fl = fraisDe(e);
+  $('pf').innerHTML = fl.length ? fl.map(f => `<option value="${esc(f.id)}">${esc(f.lib)} — reste ${fmt(f.montant - paidF(e, f))}</option>`).join('') : '<option value="">Aucun frais défini</option>';
+  defMont();
+  const h = PA.filter(p => p.inscription_id === e.id).sort((a, b) => b.date_paiement.localeCompare(a.date_paiement));
+  $('hist').innerHTML = `<div class="card">Dû ${fmt(dueE(e))} · Payé ${fmt(paidE(e))} · Reste <b>${fmt(Math.max(0, dueE(e) - paidE(e)))}</b></div>` +
+    (h.map(p => { const f = FR.find(x => x.id === p.frais_id) || {};
+      return `<div class="card el"><div class="info"><b>${fmt(p.montant)}</b> · ${esc(f.lib || '—')}
+        <small>${fmtD(p.date_paiement)} · ${esc(p.mode)} · ${esc(p.recu)}</small></div>
+        <div class="b"><button class="sec" data-act="rc" data-id="${esc(p.id)}">🧾</button>
+        ${peut('paiement') ? `<button class="del" data-act="dp" data-id="${esc(p.id)}">✕</button>` : ''}</div></div>`; }).join('') || '<p class="vide">Aucun paiement</p>');
+}
+function defMont() {
+  const e = ELEVES.find(x => x.id === $('pe').value), f = FR.find(x => x.id === $('pf').value);
+  $('pm').value = e && f ? (Math.max(0, f.montant - paidF(e, f)) || '') : '';
+}
+async function okP(ev) {
+  ev.preventDefault(); erreur('');
+  if (!peut('paiement')) return alert('Accès non autorisé.');
+  const e = ELEVES.find(x => x.id === $('pe').value), f = FR.find(x => x.id === $('pf').value);
+  if (!e || !f) return alert('Choisissez un élève et un frais.');
+  const m = +$('pm').value, date = $('pd').value;
+  if (!(m > 0) || !date) return alert('Indiquez le montant et la date.');
+  const reste = f.montant - paidF(e, f);
+  if (m > reste && !confirm('Le montant dépasse le reste à payer (' + fmt(reste) + '). Continuer ?')) return;
+  const b = $('bpay'); b.disabled = true;
+  try {
+    let p = null, err = null;
+    for (let essai = 0; essai < 3; essai++) {
+      const recu = await prochainRecu('paiements', 'REC', date.slice(0, 4), $('etab').value);
+      const ligne = { etablissement_id: $('etab').value, annee_id: $('annee').value, inscription_id: e.id, frais_id: f.id,
+        montant: m, date_paiement: date, mode: $('pmo').value, reference: $('pr').value.trim() || null, recu, empreinte: empreinte(recu, m, date, e.id) };
+      const r = await sb.from('paiements').insert(ligne).select().single();
+      if (!r.error) { p = r.data; err = null; break; }
+      err = r.error; if (r.error.code !== '23505') break;
+    }
+    if (err) throw err;
+    $('pr').value = ''; $('pmat').value = ''; $('psearch').value = ''; $('pmatInfo').innerHTML = ''; $('psearchInfo').innerHTML = '';
+    await chargerDonnees(); recu(p.id);
+  } catch (x) { erreur('Enregistrement impossible : ' + esc(x.message || x)); }
+  b.disabled = false;
+}
+async function delP(id) {
+  if (!peut('paiement')) return alert('Accès non autorisé.');
+  if (!confirm('Supprimer ce paiement ?')) return;
+  const { error } = await sb.from('paiements').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  await chargerDonnees();
+}
+function recu(id) {
+  const p = PA.find(x => x.id === id); if (!p) return;
+  const e = ELEVES.find(x => x.id === p.inscription_id) || {}, f = FR.find(x => x.id === p.frais_id) || {};
+  const du = +f.montant || 0, paye = paidF(e, f), reste = Math.max(0, du - paye);
+  const qr = qrUrl(p.recu + ' | ' + nom(e) + ' | ' + p.montant + ' ' + DEV + ' | ' + p.date_paiement + ' | ' + p.empreinte);
+  const corps = enteteHtml(etabCourant(), 'Reçu de paiement', txtSel('annee')) + `<table>
+    <tr><td>N° reçu</td><td><b>${esc(p.recu)}</b></td></tr>
+    <tr><td>Date</td><td>${fmtD(p.date_paiement)}</td></tr>
+    <tr><td>Élève</td><td>${esc(nom(e))}<br><small>${esc(e.matricule || '')}</small></td></tr>
+    <tr><td>Classe</td><td>${esc(cl(e.classe_id).nom || '—')}</td></tr>
+    <tr><td>Frais</td><td>${esc(f.lib || '—')}</td></tr>
+    <tr><td>Montant payé</td><td><b>${fmt(p.montant)}</b></td></tr>
+    <tr><td>Mode / Réf.</td><td>${esc(p.mode)} ${esc(p.reference || '')}</td></tr>
+    <tr><td>Total payé / Reste</td><td>${fmt(paye)} / ${fmt(reste)}</td></tr>
+    <tr><td>Empreinte</td><td>${esc(p.empreinte || '')}</td></tr></table>
+    <div style="text-align:center"><img src="${qr}" alt="QR" width="120" height="120"></div>` +
+    signaturesHtml([{ titre: 'Le caissier', nom: C.nom_complet }, { titre: "L'élève / le parent", nom: nom(e) }]);
+  afficherRecu(corps, 'Reçu ' + p.recu, `Reçu ${p.recu}\n${nom(e)}\n${f.lib || ''} : ${fmt(p.montant)}\nDate : ${fmtD(p.date_paiement)}\nCode : ${p.empreinte}`);
+}
+
+/* ===== Recherche élève + 5 derniers ===== */
+const REC_KEY = 'kalasa_recherche_eleve';
+const getRecents = () => { try { return JSON.parse(localStorage.getItem(REC_KEY)) || []; } catch { return []; } };
+function ajouterRecent(e) {
+  const l = getRecents().filter(x => x.id !== e.id); l.unshift({ id: e.id, nom: nom(e), matricule: e.matricule });
+  localStorage.setItem(REC_KEY, JSON.stringify(l.slice(0, 5))); afficherRecents();
+}
+function afficherRecents() {
+  const l = getRecents().filter(x => ELEVES.some(e => e.id === x.id)), box = $('recentBox');
+  box.innerHTML = l.length ? `<small style="opacity:.7;font-size:.75rem">🕘 Derniers élèves recherchés :</small><div class="recent">
+    ${l.map(x => `<button type="button" data-act="rec" data-id="${esc(x.id)}">${esc(x.nom)} <small>${esc(x.matricule || '')}</small></button>`).join('')}</div>` : '';
+}
+function selectionnerEleve(e) {
+  if (cid() !== e.classe_id) { $('classe').value = e.classe_id; $('classe').dispatchEvent(new Event('change')); }
+  fillPe(); $('pe').value = e.id; $('pmat').value = e.matricule || ''; rPay(); ajouterRecent(e);
+  const msg = `✅ ${esc(nom(e))} · ${esc(cl(e.classe_id).nom || '')}`;
+  $('pmatInfo').innerHTML = msg; $('psearchInfo').innerHTML = msg;
+}
+let searchTimer = null;
+function rechercheEleve(force) {
+  clearTimeout(searchTimer);
+  const mat = $('pmat').value.trim().toLowerCase(), txt = $('psearch').value.trim().toLowerCase();
+  if (!mat && !txt) { $('pmatInfo').innerHTML = ''; $('psearchInfo').innerHTML = ''; return; }
+  const run = () => {
+    let e = null, exact = false, source = '';
+    if (mat) {
+      e = ELEVES.find(x => String(x.matricule).toLowerCase() === mat); exact = !!e;
+      if (!e) e = ELEVES.find(x => String(x.matricule).toLowerCase().includes(mat));
+      source = 'm';
+    } else {
+      const mots = txt.split(/\s+/).filter(Boolean);
+      e = ELEVES.find(x => { const n = nom(x).toLowerCase(); return mots.every(m => n.includes(m)); })
+        || ELEVES.find(x => nom(x).toLowerCase().split(/\s+/).some(p => p.startsWith(txt)));
+      source = 'n';
+    }
+    const box = source === 'm' ? $('pmatInfo') : $('psearchInfo');
+    if (!e) { box.innerHTML = '❌ Aucun élève trouvé'; return; }
+    box.innerHTML = `${exact ? '✅' : '🔎'} ${esc(nom(e))} · ${esc(cl(e.classe_id).nom || '')}`;
+    if (exact || force) selectionnerEleve(e);
+  };
+  if (force) run(); else searchTimer = setTimeout(run, 250);
+}
+
+/* ===== SITUATION ===== */
+function rSitTop() {
+  const sel = SEL(), els = elevesPortee(sel);
+  let G = 0, Fi = 0, S = 0, P = 0, I = 0, att = 0, enc = 0;
+  els.forEach(e => {
+    const sx = String(e.sexe || '').toUpperCase();
+    if (sx.startsWith('M')) G++; else if (sx.startsWith('F')) Fi++;
+    const st = statutE(e); if (st === 'S') S++; else if (st === 'P') P++; else I++;
+    att += dueE(e); enc += paidE(e);
+  });
+  const titre = sel ? `Classe : ${esc(cl(sel).nom || '—')}${cl(sel).option_faculte ? ' · ' + esc(cl(sel).option_faculte) : ''}` : 'Toute l\'école';
+  $('statsClasse').innerHTML = `<h3 style="margin-bottom:10px">👥 ${titre}</h3><div class="stats">
+    <div><b>${els.length}</b>Élèves</div>${sel ? '' : `<div><b>${classesPortee().length}</b>Classes</div>`}
+    <div><b>${G}</b>Garçons</div><div><b>${Fi}</b>Filles</div>
+    <div class="ok"><b>${S}</b>Soldés</div><div class="mid"><b>${P}</b>Partiels</div><div class="ko"><b>${I}</b>Impayés</div>
+    <div><b>${pct(enc, att)} %</b>Recouvrement</div></div>`;
+  $('tot').innerHTML = `<div><b>${fmt(att)}</b>Attendu</div><div style="color:#16a34a"><b>${fmt(enc)}</b>Encaissé</div>
+    <div style="color:#dc2626"><b>${fmt(Math.max(0, att - enc))}</b>Reste</div>`;
+  const fl = FR.filter(f => !sel || !f.classe_id || f.classe_id === sel);
+  $('detailFrais').innerHTML = '<h3>Détail par source</h3>' + (fl.length ? '<div class="grid">' + fl.map(f => {
+    const conc = els.filter(e => !f.classe_id || f.classe_id === e.classe_id);
+    const a = f.montant * conc.length, p = conc.reduce((s, e) => s + paidF(e, f), 0);
+    return `<div class="fr"><b>${fmt(f.montant)}</b><span>${esc(f.lib)}</span>
+      <div class="bar"><i style="width:${pct(p, a)}%;background:#2563eb"></i></div>
+      <small>${conc.length} élève(s) · ${f.classe_id ? esc(cl(f.classe_id).nom || '—') : 'Toutes les classes'}<br>Encaissé : ${fmt(p)} · Reste : ${fmt(Math.max(0, a - p))}</small></div>`;
+  }).join('') + '</div>' : '<p class="vide">Aucun frais défini</p>');
+}
+function lignesSituation() {
+  const f = $('sf').value;
+  return elevesPortee(SEL()).map(e => ({ e, du: dueE(e), pa: paidE(e), reste: Math.max(0, dueE(e) - paidE(e)), s: statutE(e) }))
+    .filter(r => !f || r.s === f).sort((a, b) => nom(a.e).localeCompare(nom(b.e), 'fr'));
+}
+function rSit() {
+  rSitTop();
+  const l = lignesSituation();
+  $('ls').innerHTML = l.length ? l.map(r => `<div class="card el"><div class="info"><b>${esc(nom(r.e))}</b>
+    <small>${esc(r.e.matricule || '')} · ${esc(cl(r.e.classe_id).nom || '—')}<br>Dû ${fmt(r.du)} · Payé ${fmt(r.pa)} · Reste ${fmt(r.reste)}</small></div>
+    <div class="b">${LIB_ST[r.s]}</div></div>`).join('') : '<p class="vide">Aucun élève</p>';
+}
+function expSit() {
+  if (!peut('export')) return alert('Accès non autorisé.');
+  csv('situation_' + today(), [['Matricule', 'Élève', 'Classe', 'Dû', 'Payé', 'Reste', 'Statut']]
+    .concat(lignesSituation().map(r => [r.e.matricule || '', nom(r.e), cl(r.e.classe_id).nom || '', r.du, r.pa, r.reste, LIB_ST[r.s]])));
+}
+function expPay() {
+  if (!peut('export')) return alert('Accès non autorisé.');
+  const ids = new Set(elevesPortee(SEL()).map(e => e.id));
+  csv('paiements_' + today(), [['Reçu', 'Date', 'Élève', 'Matricule', 'Frais', 'Montant', 'Mode', 'Référence']]
+    .concat(PA.filter(p => ids.has(p.inscription_id)).map(p => {
+      const e = ELEVES.find(x => x.id === p.inscription_id) || {}, f = FR.find(x => x.id === p.frais_id) || {};
+      return [p.recu, p.date_paiement, nom(e), e.matricule || '', f.lib || '', p.montant, p.mode, p.reference || ''];
+    })));
+}
+function pdfSituation() {
+  if (!peut('export')) return alert('Accès non autorisé.');
+  const l = lignesSituation(), t = l.reduce((a, r) => ({ du: a.du + r.du, pa: a.pa + r.pa, re: a.re + r.reste }), { du: 0, pa: 0, re: 0 });
+  pdfTable('Situation financière — ' + (SEL() ? txtSel('classe') : 'Toute l\'école'),
+    ['#', 'Matricule', 'Élève', 'Classe', 'Dû', 'Payé', 'Reste', 'Statut'],
+    l.map((r, i) => [i + 1, r.e.matricule || '', nom(r.e), cl(r.e.classe_id).nom || '', fmtP(r.du), fmtP(r.pa), fmtP(r.reste), LIB_ST[r.s].replace(/^\S+\s/, '')]),
+    ['', '', '', 'TOTAL', fmtP(t.du), fmtP(t.pa), fmtP(t.re), '']);
+}
+
+/* ===== Liste soldés / non soldés ===== */
+function rListeFrais() {
+  const anc = $('lstClasse').value;
+  $('lstClasse').innerHTML = '<option value="">Toutes les classes</option>' + opts(classesPortee(), c => c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''));
+  if ([...$('lstClasse').options].some(o => o.value === anc)) $('lstClasse').value = anc;
+  majFraisListe();
+}
+function majFraisListe() {
+  const c = $('lstClasse').value, anc = $('lstFrais').value;
+  $('lstFrais').innerHTML = '<option value="">Tous les frais</option>' + opts(FR.filter(f => !c || !f.classe_id || f.classe_id === c), f => f.lib);
+  if ([...$('lstFrais').options].some(o => o.value === anc)) $('lstFrais').value = anc;
+}
+function donneesListe() {
+  const c = $('lstClasse').value, st = $('lstStatut').value, f = $('lstFrais').value ? FR.find(x => x.id === $('lstFrais').value) : null;
+  return elevesPortee(c).filter(e => !f || !f.classe_id || f.classe_id === e.classe_id).map(e => {
+    const du = f ? +f.montant : dueE(e), pa = f ? paidF(e, f) : paidE(e);
+    return { e, du, pa, reste: Math.max(0, du - pa), s: du > 0 && pa >= du ? 'S' : pa > 0 ? 'P' : 'I' };
+  }).filter(r => !st || r.s === st).sort((a, b) => nom(a.e).localeCompare(nom(b.e), 'fr'));
+}
+function rListe() {
+  const l = donneesListe(), t = l.reduce((a, r) => ({ du: a.du + r.du, pa: a.pa + r.pa, re: a.re + r.reste }), { du: 0, pa: 0, re: 0 });
+  $('lstResultat').innerHTML = l.length ? `<p style="margin-top:10px"><b>${l.length}</b> élève(s) · Dû ${fmt(t.du)} · Payé ${fmt(t.pa)} · Reste <b>${fmt(t.re)}</b></p>
+    <div style="overflow-x:auto"><table class="tl"><tr><th>#</th><th>Élève</th><th>Classe</th><th class="n">Dû</th><th class="n">Payé</th><th class="n">Reste</th><th>Statut</th></tr>
+    ${l.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(nom(r.e))}<br><small>${esc(r.e.matricule || '')}</small></td><td>${esc(cl(r.e.classe_id).nom || '—')}</td>
+    <td class="n">${fmt(r.du)}</td><td class="n">${fmt(r.pa)}</td><td class="n">${fmt(r.reste)}</td><td>${LIB_ST[r.s]}</td></tr>`).join('')}</table></div>`
+    : '<p class="vide">Aucun élève ne correspond à ces critères</p>';
+}
+function imprimerListe() {
+  const l = donneesListe(), t = l.reduce((a, r) => ({ du: a.du + r.du, pa: a.pa + r.pa, re: a.re + r.reste }), { du: 0, pa: 0, re: 0 });
+  const corps = enteteHtml(etabCourant(), 'Liste des élèves — ' + txtSel('lstStatut'), txtSel('lstClasse') + ' · ' + txtSel('lstFrais') + ' · ' + txtSel('annee')) +
+    `<table><tr><th>#</th><th>Matricule</th><th>Élève</th><th>Dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr>
+    ${l.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.e.matricule || '')}</td><td>${esc(nom(r.e))}</td><td>${fmt(r.du)}</td><td>${fmt(r.pa)}</td><td>${fmt(r.reste)}</td><td>${LIB_ST[r.s]}</td></tr>`).join('')}
+    <tr><th colspan="3">TOTAL</th><th>${fmt(t.du)}</th><th>${fmt(t.pa)}</th><th>${fmt(t.re)}</th><th></th></tr></table>` +
+    signaturesHtml([{ titre: 'Établi par', nom: C.nom_complet }, { titre: "Le chef d'établissement", nom: etabCourant().chef || '' }]);
+  ouvrirImpression(corps, 'Liste des élèves');
+}
+
+/* ===== DÉPENSES ===== */
+function rDepCompte() {
+  const cur = $('dc').value;
+  $('dc').innerHTML = ['Caisse', 'Banque', 'Mobile Money'].map(c => `<option>${c}</option>`).join('');
+  if (cur) $('dc').value = cur;
+}
+async function okD(ev) {
+  ev.preventDefault(); erreur('');
+  if (!peut('depense')) return alert('Accès non autorisé.');
+  const d = { etablissement_id: $('etab').value, annee_id: $('annee').value, motif: $('dm').value.trim(), montant: +$('dmt').value,
+    date_depense: $('dd').value, compte: $('dc').value, mode: $('dmo').value, reference: $('dref').value.trim() || null };
+  if (!d.etablissement_id || !d.annee_id) return alert('Choisissez un établissement et une année.');
+  if (!d.motif || !(d.montant > 0) || !d.date_depense) return alert('Remplissez le motif, le montant et la date.');
+  const { error } = await sb.from('depenses').insert(d);
+  if (error) return erreur('Enregistrement impossible : ' + esc(error.message));
+  $('dm').value = ''; $('dmt').value = ''; $('dref').value = '';
+  await chargerDonnees();
+}
+async function delD(id) {
+  if (!peut('depense')) return alert('Accès non autorisé.');
+  if (!confirm('Supprimer cette dépense ?')) return;
+  const { error } = await sb.from('depenses').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  await chargerDonnees();
+}
+const depensesPeriode = (a, b) => DEP.filter(d => inRange(d.date_depense, a, b)).sort((x, y) => y.date_depense.localeCompare(x.date_depense));
+function rDep() {
+  const l = depensesPeriode($('d1').value, $('d2').value);
+  $('totDep').textContent = 'Total des dépenses : ' + fmt(l.reduce((s, d) => s + +d.montant, 0)) + ' (' + l.length + ')';
+  $('ld').innerHTML = l.length ? l.map(d => `<div class="card el"><div class="info"><b>${fmt(d.montant)}</b> · ${esc(d.motif)}
+    <small>${fmtD(d.date_depense)} · ${esc(d.compte || '')} · ${esc(d.mode || '')}${d.reference ? ' · ' + esc(d.reference) : ''}</small></div>
+    ${peut('depense') ? `<div class="b"><button class="del" data-act="dd" data-id="${esc(d.id)}">✕</button></div>` : ''}</div>`).join('')
+    : '<p class="vide">Aucune dépense sur cette période</p>';
+}
+function pdfDepenses() {
+  if (!peut('export')) return alert('Accès non autorisé.');
+  const l = depensesPeriode($('d1').value, $('d2').value);
+  pdfTable('Rapport des dépenses', ['Date', 'Motif', 'Compte', 'Mode', 'Réf.', 'Montant'],
+    l.map(d => [d.date_depense, d.motif, d.compte || '', d.mode || '', d.reference || '', fmtP(d.montant)]),
+    ['', '', '', '', 'TOTAL', fmtP(l.reduce((s, d) => s + +d.montant, 0))]);
+}
+
+/* ===== CAISSE ===== */
+function mouvements(a, b) {
+  const ent = PA.filter(p => inRange(p.date_paiement, a, b)).map(p => {
+    const e = ELEVES.find(x => x.id === p.inscription_id) || {}, f = FR.find(x => x.id === p.frais_id) || {};
+    return { type: 'E', date: p.date_paiement, lib: (f.lib || 'Paiement') + ' — ' + nom(e), mode: p.mode, montant: +p.montant, ref: p.recu };
+  });
+  const sor = depensesPeriode(a, b).map(d => ({ type: 'S', date: d.date_depense, lib: d.motif, mode: d.mode, montant: +d.montant, ref: d.reference || '' }));
+  const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  const TY = { salaire: 'Salaire', prime: 'Prime', allocation: 'Allocation', autres: 'Autres' };
+  const sal = (CTX.SAL || []).filter(x => inRange(x.date_paiement, a, b)).map(x => ({ type: 'S', date: x.date_paiement,
+    lib: 'Personnel — ' + TY[x.type] + ' ' + MOIS[x.mois - 1] + ' ' + x.an + ' — ' + x.nom, mode: x.mode, montant: +x.montant, ref: x.recu }));
+  return ent.concat(sor, sal).sort((x, y) => y.date.localeCompare(x.date));
+}
+function rCaisse() {
+  const m = mouvements($('c1').value, $('c2').value);
+  const E = m.filter(x => x.type === 'E').reduce((s, x) => s + x.montant, 0), S = m.filter(x => x.type === 'S').reduce((s, x) => s + x.montant, 0);
+  $('blocCaisse').innerHTML = `<div class="ent"><b>${fmt(E)}</b>Entrées</div><div class="sor"><b>${fmt(S)}</b>Sorties</div><div class="sol"><b>${fmt(E - S)}</b>Solde</div>`;
+  $('mvtCaisse').innerHTML = m.length ? m.map(x => `<div class="card el"><div class="info"><b style="color:${x.type === 'E' ? '#16a34a' : '#dc2626'}">${x.type === 'E' ? '+' : '−'} ${fmt(x.montant)}</b> · ${esc(x.lib)}
+    <small>${fmtD(x.date)} · ${esc(x.mode || '')}${x.ref ? ' · ' + esc(x.ref) : ''}</small></div></div>`).join('')
+    : '<p class="vide">Aucun mouvement sur cette période</p>';
+}
+function pdfCaisse() {
+  if (!peut('export')) return alert('Accès non autorisé.');
+  const m = mouvements($('c1').value, $('c2').value);
+  const E = m.filter(x => x.type === 'E').reduce((s, x) => s + x.montant, 0), S = m.filter(x => x.type === 'S').reduce((s, x) => s + x.montant, 0);
+  pdfTable('Rapport de caisse', ['Date', 'Type', 'Libellé', 'Mode', 'Montant'],
+    m.map(x => [x.date, x.type === 'E' ? 'Entrée' : 'Sortie', x.lib, x.mode || '', fmtP(x.montant)]), ['', '', '', 'Solde', fmtP(E - S)]);
+}
+
+/* ===== Événements ===== */
+const ACT = { ef: editF, df: delF, rc: recu, dp: delP, dd: delD, rec: id => { const e = ELEVES.find(x => x.id === id); if (e) selectionnerEleve(e); } };
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) ACT[b.dataset.act](b.dataset.id); });
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => tab(b.dataset.t)));
+$('fF').addEventListener('submit', okF); $('fa').addEventListener('click', resetF);
+$('dev').addEventListener('change', () => { DEV = $('dev').value.trim() || 'USD'; localStorage.setItem('kalasa_devise', DEV); rendu(); });
+$('fP').addEventListener('submit', okP);
+$('pe').addEventListener('change', rPay); $('pf').addEventListener('change', defMont);
+$('psearch').addEventListener('input', () => rechercheEleve(false)); $('pmat').addEventListener('input', () => rechercheEleve(false));
+['psearch', 'pmat'].forEach(i => $(i).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); rechercheEleve(true); } }));
+$('sf').addEventListener('change', rSit);
+$('lstClasse').addEventListener('change', () => { majFraisListe(); rListe(); });
+$('lstFrais').addEventListener('change', rListe); $('lstStatut').addEventListener('change', rListe);
+$('bimpl').addEventListener('click', imprimerListe);
+$('bexs').addEventListener('click', expSit); $('bexp').addEventListener('click', expPay); $('bpds').addEventListener('click', pdfSituation);
+$('fD').addEventListener('submit', okD);
+$('d1').addEventListener('change', rDep); $('d2').addEventListener('change', rDep); $('bpdd').addEventListener('click', pdfDepenses);
+$('c1').addEventListener('change', rCaisse); $('c2').addEventListener('change', rCaisse); $('bpdc').addEventListener('click', pdfCaisse);
+$('etab').addEventListener('change', async () => { remplirClasses(); await chargerDonnees(); });
+$('annee').addEventListener('change', async () => { remplirClasses(); await chargerDonnees(); });
+$('classe').addEventListener('change', () => { fillPe(); rPay(); if ($('pS').style.display !== 'none') rSit(); });
+
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
