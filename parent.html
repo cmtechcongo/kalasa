@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Parents</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.chk{max-height:180px;overflow:auto;border:1px solid #8885;border-radius:8px;padding:6px;margin-top:6px}
+.chk label{display:flex;gap:8px;align-items:center;margin:6px 0;font-size:.95rem;opacity:1}
+.el{display:flex;align-items:center;gap:10px}
+.tag{background:var(--m);color:#fff;border-radius:20px;padding:2px 8px;font-size:.7rem}
+.msg{background:#16a34a;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;display:none;text-align:center}
+a.tel{color:inherit}
+.warn{word-break:break-word}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div><div class="msg" id="msg"></div>
+
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouveau parent / tuteur</h2>
+  <label>Nom *</label><input id="nom" autocomplete="off">
+  <label>Postnom</label><input id="postnom" autocomplete="off">
+  <label>Prénom *</label><input id="prenom" autocomplete="off">
+  <div class="g">
+    <div><label>Lien de parenté *</label>
+      <select id="lien"><option>Père</option><option>Mère</option><option>Tuteur / Tutrice</option><option>Autre</option></select></div>
+    <div><label>Profession</label><input id="profession" autocomplete="off"></div>
+  </div>
+  <div class="g">
+    <div><label>Téléphone *</label><input id="tel" type="tel"></div>
+    <div><label>Téléphone 2</label><input id="tel2" type="tel"></div>
+  </div>
+  <label>E-mail</label><input id="email" type="email">
+  <label>Adresse</label><input id="adresse" autocomplete="off">
+
+  <label>Enfant(s) inscrit(s) * <span id="nbSel"></span></label>
+  <input id="qe" type="search" placeholder="🔍 Chercher un élève…">
+  <div class="chk" id="elv"></div>
+
+  <div class="acts">
+    <button id="bok">Enregistrer</button>
+    <button type="button" class="sec" id="ann" style="display:none">Annuler</button>
+  </div>
+</form>
+
+<div class="card">
+  <h2>Parents / tuteurs (<span id="total">0</span>)</h2>
+  <input id="q" type="search" placeholder="🔍 Nom, téléphone, nom de l'enfant…">
+  <div class="acts"><button class="sec" type="button" id="bexp">⬇ Exporter (Excel/CSV)</button></div>
+</div>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire']);
+const ETAB = C.etabId;
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nul = v => { v = String(v ?? '').trim(); return v === '' ? null : v; };
+
+let ELEVES = [], ANNEES = [], CLASSES = [], L = [], eid = null, sel = new Set(), avant = new Set(), ANNEE = '';
+const nA = id => (ANNEES.find(x => x.id === id) || {}).lib || '—';
+const nC = id => (CLASSES.find(x => x.id === id) || {}).nom || '—';
+const nomEl = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+function notifier(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 2000); }
+
+function anneeCourante() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+async function init() {
+  if (!ETAB) return erreur('Aucun établissement disponible. Créez-en un d\'abord.');
+  const [ra, rc, re] = await Promise.all([
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('classes').select('id, nom').eq('etablissement_id', ETAB),
+    sb.from('inscriptions').select('id, matricule, nom, postnom, prenom, classe_id, annee_id, etablissement_id').eq('etablissement_id', ETAB)
+  ]);
+  const err = ra.error || rc.error || re.error;
+  if (err) return erreur('Lecture impossible : ' + esc(err.message));
+  ANNEES = ra.data || []; CLASSES = rc.data || []; ELEVES = re.data || [];
+  ANNEE = anneeCourante();
+  if (!ELEVES.length) erreur('Inscrivez d\'abord des <a href="eleve.html">élèves</a>.');
+  majEleves();
+  await charger();
+}
+
+/* Élèves proposés : ceux de l'établissement et de l'année choisis, plus ceux déjà cochés */
+function majEleves() {
+  const q = $('qe').value.toLowerCase();
+  const l = ELEVES.filter(e => sel.has(e.id) || (e.annee_id === ANNEE &&
+    [e.matricule, e.nom, e.postnom, e.prenom].some(v => String(v || '').toLowerCase().includes(q)))).slice(0, 40);
+  $('elv').innerHTML = l.length
+    ? l.map(e => `<label><input type="checkbox" value="${esc(e.id)}" ${sel.has(e.id) ? 'checked' : ''}> ${esc(nomEl(e))} · ${esc(nC(e.classe_id))} (${esc(nA(e.annee_id))})</label>`).join('')
+    : '<small>Aucun élève trouvé</small>';
+  majNb();
+}
+const majNb = () => { $('nbSel').textContent = sel.size ? '— ' + sel.size + ' sélectionné(s)' : ''; };
+
+async function charger() {
+  const { data, error } = await sb.from('parents').select('*, parent_eleves(inscription_id)')
+    .eq('etablissement_id', ETAB).order('date_creation', { ascending: false });
+  if (error) { erreur('Lecture impossible : ' + esc(error.message)); L = []; }
+  else L = (data || []).map(p => ({ ...p, eleves: (p.parent_eleves || []).map(x => x.inscription_id) }));
+  rendu();
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  if (!sel.size) return alert('Sélectionnez au moins un enfant.');
+  const nom = $('nom').value.trim(), prenom = $('prenom').value.trim(), tel = $('tel').value.trim();
+  if (!nom || !prenom || !tel) return alert('Remplissez les champs obligatoires : nom, prénom, téléphone.');
+  const d = { nom, postnom: nul($('postnom').value), prenom, lien: $('lien').value, profession: nul($('profession').value),
+    tel, tel2: nul($('tel2').value), email: nul($('email').value), adresse: nul($('adresse').value) };
+  const b = $('bok'); b.disabled = true;
+  try {
+    let pid = eid;
+    if (eid) {
+      const { error } = await sb.from('parents').update(d).eq('id', eid);
+      if (error) throw error;
+      const retirer = [...avant].filter(id => !sel.has(id));
+      if (retirer.length) {
+        const { error: e1 } = await sb.from('parent_eleves').delete().eq('parent_id', eid).in('inscription_id', retirer);
+        if (e1) throw e1;
+      }
+    } else {
+      const { data, error } = await sb.from('parents').insert({ ...d, etablissement_id: ETAB }).select('id').single();
+      if (error) throw error;
+      pid = data.id;
+    }
+    const ajouter = [...sel].filter(id => !avant.has(id) || !eid).map(id => ({ parent_id: pid, inscription_id: id }));
+    if (ajouter.length) {
+      const { error: e2 } = await sb.from('parent_eleves').insert(ajouter);
+      if (e2) {
+        if (!eid) await sb.from('parents').delete().eq('id', pid);   // on annule la création
+        throw e2;
+      }
+    }
+    notifier(eid ? '✔ Modifié' : '✔ Enregistré');
+    reinit(); await charger();
+  } catch (x) { erreur('Enregistrement impossible : ' + esc(x.message || x)); }
+  b.disabled = false;
+}
+
+function reinit() {
+  $('f').reset(); sel = new Set(); avant = new Set(); eid = null;
+  $('t').textContent = 'Nouveau parent / tuteur'; $('ann').style.display = 'none'; majEleves();
+}
+function modifier(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  ['nom', 'postnom', 'prenom', 'lien', 'profession', 'tel', 'tel2', 'email', 'adresse'].forEach(c => $(c).value = x[c] || '');
+  sel = new Set(x.eleves || []); avant = new Set(x.eleves || []);
+  $('qe').value = ''; majEleves(); eid = id;
+  $('t').textContent = 'Modifier le parent'; $('ann').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function supprimer(id) {
+  erreur('');
+  if (!confirm('Supprimer ce parent ?')) return;
+  const { error } = await sb.from('parents').delete().eq('id', id);
+  if (error) return erreur('Suppression impossible : ' + esc(error.message));
+  await charger();
+}
+
+const enfants = p => (p.eleves || []).map(id => ELEVES.find(e => e.id === id)).filter(Boolean);
+/* parents visibles = ceux dont au moins un enfant est dans l'année choisie (ou sans enfant) */
+const vis = () => L.filter(p => { const en = enfants(p); return !en.length || en.some(e => e.annee_id === ANNEE); });
+
+function rendu() {
+  const q = $('q').value.toLowerCase();
+  const t = vis().filter(p => [p.nom, p.postnom, p.prenom, p.tel, p.tel2, ...enfants(p).map(nomEl)]
+    .some(v => String(v || '').toLowerCase().includes(q)));
+  $('total').textContent = t.length;
+  $('liste').innerHTML = t.length ? t.map(p => `
+  <div class="card el"><div class="info"><b>${esc([p.nom, p.postnom, p.prenom].filter(Boolean).join(' '))}</b>
+    <small><span class="tag">${esc(p.lien)}</span>${p.profession ? ' · ' + esc(p.profession) : ''}</small>
+    <small>📞 <a class="tel" href="tel:${esc(p.tel)}">${esc(p.tel)}</a>${p.tel2 ? ' · ' + esc(p.tel2) : ''}</small>
+    ${p.email ? `<small>✉ ${esc(p.email)}</small>` : ''}
+    ${p.adresse ? `<small>📍 ${esc(p.adresse)}</small>` : ''}
+    <small>🧒 ${enfants(p).map(e => esc(nomEl(e)) + ' (' + esc(nC(e.classe_id)) + ')').join(', ') || '—'}</small></div>
+  <div class="b"><button class="sec" data-a="m" data-id="${esc(p.id)}">✎</button><button class="del" data-a="s" data-id="${esc(p.id)}">✕</button></div></div>`).join('')
+  : '<p style="text-align:center;opacity:.6">Aucun parent enregistré</p>';
+}
+function exporter() {
+  const t = vis();
+  if (!t.length) return notifier('Rien à exporter');
+  const h = ['Nom', 'Postnom', 'Prénom', 'Lien', 'Profession', 'Téléphone', 'Téléphone 2', 'E-mail', 'Adresse', 'Enfants'];
+  const r = t.map(p => [p.nom, p.postnom, p.prenom, p.lien, p.profession, p.tel, p.tel2, p.email, p.adresse,
+    enfants(p).map(nomEl).join(' | ')].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'parents_kalasa.csv'; a.click();
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('ann').addEventListener('click', reinit);
+$('qe').addEventListener('input', majEleves);
+$('q').addEventListener('input', rendu);
+$('bexp').addEventListener('click', exporter);
+$('elv').addEventListener('change', e => {
+  const i = e.target; if (!i.value) return;
+  i.checked ? sel.add(i.value) : sel.delete(i.value); majNb();
+});
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  if (b.dataset.a === 'm') modifier(b.dataset.id);
+  if (b.dataset.a === 's') supprimer(b.dataset.id);
+});
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
