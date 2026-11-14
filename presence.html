@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Présences</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;gap:4px;font-size:.75rem}
+.stats b{display:block;font-size:1.3rem}
+.st{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.st button{padding:10px 2px;font-size:.78rem;background:#8883;color:inherit}
+.st button.on.P{background:#16a34a;color:#fff}.st button.on.A{background:#dc2626;color:#fff}
+.st button.on.R{background:#f59e0b;color:#fff}.st button.on.E{background:#6366f1;color:#fff}
+.liens{display:flex;gap:12px;margin-top:8px;font-size:.85rem}.liens a,.liens span{color:var(--m);cursor:pointer;text-decoration:none}
+.rap{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chips{display:flex;gap:8px;font-size:.8rem;margin-top:4px;opacity:.85}
+.taux{font-size:1.2rem;font-weight:700}
+.warn{word-break:break-word}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div>
+
+<div class="card">
+  <div class="g">
+    <div><label>Établissement</label><select id="etab"></select></div>
+    <div><label>Année scolaire</label><select id="annee"></select></div>
+  </div>
+  <label>Classe</label><select id="classe"></select>
+</div>
+
+<div class="tabs">
+  <button id="tA" class="on">✅ Appel</button>
+  <button id="tR">📊 Rapport</button>
+</div>
+
+<section id="pA">
+  <div class="card">
+    <label>Date de l'appel</label><input id="date" type="date">
+    <div class="acts"><button class="sec" id="btous">✔ Marquer les non-marqués présents</button></div>
+  </div>
+  <div class="card stats" id="stats"></div>
+  <div id="liste"></div>
+</section>
+
+<section id="pR" style="display:none">
+  <div class="card">
+    <div class="g">
+      <div><label>Du</label><input id="deb" type="date"></div>
+      <div><label>Au</label><input id="fin" type="date"></div>
+    </div>
+    <div class="acts">
+      <button class="sec" id="bexr">⬇ Rapport (CSV)</button>
+      <button class="sec" id="bexj">⬇ Journal détaillé</button>
+    </div>
+  </div>
+  <div class="card" id="resume"></div>
+  <div id="rapport"></div>
+</section>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const nom = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
+const STAT = [['P', 'Présent'], ['A', 'Absent'], ['R', 'Retard'], ['E', 'Excusé']];
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+
+let ETABS = [], ANNEES = [], CLASSES = [], ELEVES = [], TEL = {}, REC = {}, RAP = [], M = 'A', tok = 0;
+const cid = () => $('classe').value;
+
+/* Lecture par pages de 1000 lignes (la limite par défaut du serveur) */
+async function toutLire(creer) {
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await creer().range(i, i + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+function anneeDefaut() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+async function init() {
+  const [re, ra, rc] = await Promise.all([
+    sb.from('etablissements').select('id, nom').order('nom'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
+  ]);
+  const err = re.error || ra.error || rc.error;
+  if (err) return erreur('Lecture impossible : ' + esc(err.message));
+  ETABS = re.data || []; ANNEES = ra.data || []; CLASSES = rc.data || [];
+  if (!CLASSES.length) erreur('Créez d\'abord <a href="classe.html">des classes</a> et <a href="eleve.html">des élèves</a>.');
+
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+  if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
+  $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('annee').value = anneeDefaut();
+  $('date').value = today(); $('fin').value = today(); $('deb').value = today().slice(0, 8) + '01';
+  await chargerParents();
+  await majClasses();
+}
+
+/* Téléphones des parents (visibles seulement pour les rôles qui ont accès aux parents) */
+async function chargerParents() {
+  TEL = {};
+  const e = $('etab').value; if (!e) return;
+  const r = await sb.from('parents').select('tel, parent_eleves(inscription_id)').eq('etablissement_id', e);
+  if (r.error) return;
+  (r.data || []).forEach(p => (p.parent_eleves || []).forEach(x => { if (!TEL[x.inscription_id]) TEL[x.inscription_id] = p.tel; }));
+}
+
+async function majClasses() {
+  const e = $('etab').value, a = $('annee').value;
+  const l = CLASSES.filter(c => c.etablissement_id === e && c.annee_id === a)
+    .sort((x, y) => String(x.nom).localeCompare(String(y.nom), 'fr', { numeric: true }));
+  $('classe').innerHTML = l.length
+    ? l.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''))}</option>`).join('')
+    : '<option value="">Aucune classe</option>';
+  await chargerEleves();
+}
+async function chargerEleves() {
+  ELEVES = [];
+  if (cid()) {
+    const { data, error } = await sb.from('inscriptions')
+      .select('id, matricule, nom, postnom, prenom, photo').eq('classe_id', cid()).order('nom');
+    if (error) erreur('Lecture des élèves impossible : ' + esc(error.message));
+    else { erreur(''); ELEVES = data || []; }
+  }
+  await rendu();
+}
+
+function mode(m) {
+  M = m;
+  $('pA').style.display = m === 'A' ? 'block' : 'none'; $('pR').style.display = m === 'R' ? 'block' : 'none';
+  $('tA').className = m === 'A' ? 'on' : ''; $('tR').className = m === 'R' ? 'on' : '';
+  rendu();
+}
+
+async function rendu() {
+  const t = ++tok;
+  try {
+    if (M === 'A') {
+      REC = {};
+      if (cid() && $('date').value) {
+        const { data, error } = await sb.from('presences').select('inscription_id, statut, motif')
+          .eq('classe_id', cid()).eq('date_appel', $('date').value);
+        if (error) throw error;
+        (data || []).forEach(r => REC[r.inscription_id] = { s: r.statut, n: r.motif || '' });
+      }
+      if (t !== tok) return;
+      appel();
+    } else {
+      RAP = [];
+      if (cid()) {
+        const d = $('deb').value, f = $('fin').value;
+        RAP = await toutLire(() => sb.from('presences').select('inscription_id, date_appel, statut, motif')
+          .eq('classe_id', cid()).gte('date_appel', d).lte('date_appel', f).order('date_appel'));
+      }
+      if (t !== tok) return;
+      rapport();
+    }
+  } catch (x) { erreur('Lecture impossible : ' + esc(x.message || x)); }
+}
+
+async function marquer(id, s) {
+  const avant = REC[id];
+  const motif = s === 'P' ? null : ((avant || {}).n || null);
+  REC[id] = { s, n: motif || '' }; appel();
+  const { error } = await sb.from('presences').upsert({
+    etablissement_id: $('etab').value, classe_id: cid(), inscription_id: id,
+    date_appel: $('date').value, statut: s, motif
+  }, { onConflict: 'inscription_id,date_appel' });
+  if (error) {
+    if (avant) REC[id] = avant; else delete REC[id];
+    appel(); erreur('Enregistrement impossible : ' + esc(error.message));
+  } else erreur('');
+}
+async function note(id) {
+  const cur = (REC[id] || {}).n || '';
+  const n = prompt('Motif / remarque :', cur); if (n === null) return;
+  const { error } = await sb.from('presences').update({ motif: n.trim() || null })
+    .eq('inscription_id', id).eq('date_appel', $('date').value);
+  if (error) return erreur('Enregistrement impossible : ' + esc(error.message));
+  REC[id].n = n.trim(); appel();
+}
+async function tous() {
+  if (!ELEVES.length) return;
+  const rows = ELEVES.filter(e => !REC[e.id]).map(e => ({
+    etablissement_id: $('etab').value, classe_id: cid(), inscription_id: e.id,
+    date_appel: $('date').value, statut: 'P', motif: null
+  }));
+  if (!rows.length) return;
+  const { error } = await sb.from('presences').upsert(rows, { onConflict: 'inscription_id,date_appel', ignoreDuplicates: true });
+  if (error) return erreur('Enregistrement impossible : ' + esc(error.message));
+  erreur(''); rows.forEach(r => REC[r.inscription_id] = { s: 'P', n: '' }); appel();
+}
+
+function appel() {
+  const list = ELEVES, c = { P: 0, A: 0, R: 0, E: 0 };
+  list.forEach(e => { const s = (REC[e.id] || {}).s; if (s) c[s]++; });
+  const non = list.length - c.P - c.A - c.R - c.E;
+  $('stats').innerHTML = `<div style="color:#16a34a"><b>${c.P}</b>Présents</div><div style="color:#dc2626"><b>${c.A}</b>Absents</div>
+   <div style="color:#f59e0b"><b>${c.R}</b>Retards</div><div style="color:#6366f1"><b>${c.E}</b>Excusés</div><div><b>${non}</b>À faire</div>`;
+  $('liste').innerHTML = list.length ? list.map(e => {
+    const r = REC[e.id] || {}, s = r.s, tel = TEL[e.id];
+    const msg = 'Bonjour, ' + nom(e) + ' est ' + (s === 'A' ? 'absent(e)' : s === 'R' ? 'en retard' : 'excusé(e)') + ' aujourd\'hui.';
+    return `<div class="card"><div class="el">
+      ${e.photo ? `<img src="${esc(e.photo)}" alt="">` : `<div class="av">${esc((e.prenom || e.nom || '?')[0].toUpperCase())}</div>`}
+      <div class="info"><b>${esc(nom(e))}</b><small>${esc(e.matricule)}</small>${r.n ? `<small>📝 ${esc(r.n)}</small>` : ''}</div></div>
+      <div class="st">${STAT.map(([k, l]) => `<button class="${k} ${s === k ? 'on' : ''}" data-m="${k}" data-id="${esc(e.id)}">${l}</button>`).join('')}</div>
+      ${s && s !== 'P' ? `<div class="liens"><span data-n="${esc(e.id)}">📝 Motif</span>
+        ${tel ? `<a href="tel:${esc(tel)}">📞 Parent</a><a href="sms:${esc(tel)}?body=${encodeURIComponent(msg)}">💬 SMS</a>` : ''}</div>` : ''}
+    </div>`;
+  }).join('') : '<p style="text-align:center;opacity:.6">Aucun élève dans cette classe</p>';
+}
+
+function calc() {
+  const jours = [...new Set(RAP.map(r => r.date_appel))].sort();
+  const par = {};
+  RAP.forEach(r => { (par[r.inscription_id] ??= { P: 0, A: 0, R: 0, E: 0 })[r.statut]++; });
+  const lignes = ELEVES.map(e => {
+    const t = par[e.id] || { P: 0, A: 0, R: 0, E: 0 };
+    const tot = t.P + t.A + t.R + t.E;
+    return { e, ...t, tot, taux: tot ? Math.round((t.P + t.R) / tot * 100) : null };
+  });
+  return { jours, lignes };
+}
+function rapport() {
+  const { jours, lignes } = calc();
+  const marq = lignes.filter(l => l.tot), moy = marq.length ? Math.round(marq.reduce((a, l) => a + l.taux, 0) / marq.length) : null;
+  $('resume').innerHTML = `<b>${jours.length}</b> jour(s) d'appel · Taux moyen : <b>${moy === null ? '—' : moy + '%'}</b>
+    <br><small style="opacity:.7">Taux = (présents + retards) ÷ appels enregistrés</small>`;
+  $('rapport').innerHTML = lignes.length ? lignes.map(l => {
+    const cls = l.taux === null ? '' : l.taux >= 85 ? 'bon' : l.taux >= 70 ? 'moy' : 'bas';
+    return `<div class="card rap"><div class="info"><b>${esc(nom(l.e))}</b>
+      <div class="chips"><span>✅ ${l.P}</span><span>❌ ${l.A}</span><span>⏰ ${l.R}</span><span>📄 ${l.E}</span></div></div>
+      <div class="taux ${cls}">${l.taux === null ? '—' : l.taux + '%'}</div></div>`;
+  }).join('') : '<p style="text-align:center;opacity:.6">Aucun élève dans cette classe</p>';
+}
+
+function telecharger(nomf, h, r) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = nomf; a.click();
+}
+const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+function exportRapport() {
+  const { lignes } = calc(); if (!lignes.length) return alert('Rien à exporter');
+  telecharger('rapport_presences.csv', ['Matricule', 'Élève', 'Présent', 'Absent', 'Retard', 'Excusé', 'Appels', 'Taux %'],
+    lignes.map(l => [l.e.matricule, nom(l.e), l.P, l.A, l.R, l.E, l.tot, l.taux ?? ''].map(q).join(';')));
+}
+function exportJournal() {
+  const rows = [];
+  RAP.forEach(r => {
+    const e = ELEVES.find(x => x.id === r.inscription_id);
+    if (e && r.statut !== 'P') rows.push([r.date_appel, e.matricule, nom(e), { A: 'Absent', R: 'Retard', E: 'Excusé' }[r.statut], r.motif].map(q).join(';'));
+  });
+  if (!rows.length) return alert('Aucune absence ni retard sur cette période');
+  telecharger('journal_absences.csv', ['Date', 'Matricule', 'Élève', 'Statut', 'Motif'], rows);
+}
+
+$('etab').addEventListener('change', async () => { await chargerParents(); await majClasses(); });
+$('annee').addEventListener('change', majClasses);
+$('classe').addEventListener('change', chargerEleves);
+$('date').addEventListener('change', rendu);
+$('deb').addEventListener('change', rendu);
+$('fin').addEventListener('change', rendu);
+$('tA').addEventListener('click', () => mode('A'));
+$('tR').addEventListener('click', () => mode('R'));
+$('btous').addEventListener('click', tous);
+$('bexr').addEventListener('click', exportRapport);
+$('bexj').addEventListener('click', exportJournal);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('[data-m]'); if (b) return marquer(b.dataset.id, b.dataset.m);
+  const n = e.target.closest('[data-n]'); if (n) note(n.dataset.n);
+});
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
