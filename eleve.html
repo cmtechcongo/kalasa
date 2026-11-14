@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KALASA — Inscription</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+input[readonly]{opacity:.6}
+.photo{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:6px}
+.photo img{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#8884}
+.el img,.av{width:52px;height:52px}
+.msg{background:#16a34a;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;display:none;text-align:center}
+.warn{word-break:break-word}
+</style></head>
+
+<body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+<div class="warn" id="warn"></div><div class="msg" id="msg"></div>
+
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouvelle inscription</h2>
+
+  <div class="photo">
+    <img id="apercu" alt="Photo">
+    <input id="fichier" type="file" accept="image/*" hidden>
+    <button type="button" class="sec" id="bphoto">📷 Ajouter une photo</button>
+  </div>
+
+  <div class="g">
+    <div><label>Établissement *</label><select id="etab"></select></div>
+    <div><label>Année scolaire *</label><select id="annee"></select></div>
+  </div>
+  <div class="g">
+    <div><label>Classe *</label><select id="classe"></select></div>
+    <div><label>Option</label><input id="option" readonly></div>
+  </div>
+
+  <label>Nom *</label><input id="nom" autocomplete="off">
+  <label>Postnom</label><input id="postnom" autocomplete="off">
+  <label>Prénom *</label><input id="prenom" autocomplete="off">
+  <div class="g">
+    <div><label>Sexe *</label>
+      <select id="sexe"><option value="">Choisir…</option><option value="M">Masculin</option><option value="F">Féminin</option></select></div>
+    <div><label>Date de naissance *</label><input id="naiss" type="date"></div>
+  </div>
+  <label>Âge (calculé)</label><input id="age" readonly>
+  <label>École de provenance</label><input id="ecole" autocomplete="off">
+
+  <div class="acts">
+    <button id="bok">Enregistrer</button>
+    <button type="button" class="sec" id="ann" style="display:none">Annuler</button>
+  </div>
+</form>
+
+<div class="card">
+  <h2>Élèves inscrits (<span id="total">0</span>)</h2>
+  <label>Année</label><select id="filtre"></select>
+  <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom, matricule, classe…">
+  <div class="acts"><button class="sec" type="button" id="bexp">⬇ Exporter (Excel/CSV)</button></div>
+</div>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant', 'caissier']);
+const GERE = ['admin', 'directeur', 'secretaire'].includes(C.role);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nul = v => { v = String(v ?? '').trim(); return v === '' ? null : v; };
+
+let ETABS = [], ANNEES = [], CLASSES = [], L = [], eid = null, photo = '';
+const nE = id => (ETABS.find(x => x.id === id) || {}).nom || '—';
+const nA = id => (ANNEES.find(x => x.id === id) || {}).lib || '—';
+const cl = id => CLASSES.find(x => x.id === id) || {};
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+function notifier(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 2000); }
+
+function anneeDefaut() {
+  let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
+  if (k && ANNEES.some(a => a.id === k)) return k;
+  return (ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '';
+}
+
+async function init() {
+  const [re, ra, rc] = await Promise.all([
+    sb.from('etablissements').select('id, nom').order('nom'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
+  ]);
+  const err = re.error || ra.error || rc.error;
+  if (err) return erreur('Lecture impossible : ' + esc(err.message));
+  ETABS = re.data || []; ANNEES = ra.data || []; CLASSES = rc.data || [];
+
+  const m = [];
+  if (!ETABS.length) m.push('<a href="etablissement.html">un établissement</a>');
+  if (!ANNEES.length) m.push('<a href="annee.html">une année scolaire</a>');
+  if (!CLASSES.length) m.push('<a href="classe.html">une classe</a>');
+  if (m.length) erreur('Créez d\'abord ' + m.join(', ') + '.');
+
+  $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+  if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
+  const ad = anneeDefaut();
+  $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('annee').value = ad;
+  $('filtre').innerHTML = '<option value="">Toutes les années</option>' + ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('filtre').value = ad;
+  if (!GERE) $('f').style.display = 'none';
+  majClasses(); apercu();
+  await charger();
+}
+
+/* Classes proposées : celles de l'établissement et de l'année choisis */
+function majClasses() {
+  const e = $('etab').value, a = $('annee').value, cur = $('classe').value;
+  const l = CLASSES.filter(c => c.etablissement_id === e && c.annee_id === a)
+    .sort((x, y) => String(x.nom).localeCompare(String(y.nom), 'fr', { numeric: true }));
+  $('classe').innerHTML = l.length
+    ? l.map(c => `<option value="${esc(c.id)}" ${c.id === cur ? 'selected' : ''}>${esc(c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''))}</option>`).join('')
+    : '<option value="">Aucune classe pour cet établissement / cette année</option>';
+  majOption();
+}
+function majOption() { $('option').value = cl($('classe').value).option_faculte || ''; }
+function calcAge(d) {
+  if (!d) return '';
+  const n = new Date(), b = new Date(d); let a = n.getFullYear() - b.getFullYear();
+  const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a;
+}
+function majAge() { const a = calcAge($('naiss').value); $('age').value = a === '' ? '' : a + ' ans'; }
+
+function apercu() {
+  $('apercu').src = photo || 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#8884"/><circle cx="48" cy="38" r="16" fill="#8889"/><ellipse cx="48" cy="84" rx="28" ry="22" fill="#8889"/></svg>');
+}
+function choisirPhoto(inp) {
+  const f = inp.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const s = 240, k = Math.min(1, s / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      photo = c.toDataURL('image/jpeg', .65); apercu();
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(f);
+}
+
+async function charger() {
+  const etab = $('etab').value;
+  if (!etab) { L = []; rendu(); return; }
+  let q = sb.from('inscriptions').select('*').eq('etablissement_id', etab).order('date_creation', { ascending: false });
+  const f = $('filtre').value; if (f) q = q.eq('annee_id', f);
+  const { data, error } = await q;
+  if (error) { erreur('Lecture impossible : ' + esc(error.message)); L = []; }
+  else L = data || [];
+  rendu();
+}
+
+/* Matricule : année (4 premiers caractères du libellé) + compteur, par établissement et par année */
+async function matricule(etab, an) {
+  const lib = (ANNEES.find(x => x.id === an) || {}).lib || '0000';
+  const { data, error } = await sb.from('inscriptions').select('matricule').eq('etablissement_id', etab).eq('annee_id', an);
+  if (error) throw error;
+  const max = Math.max(0, ...(data || []).map(x => +String(x.matricule).split('-').pop() || 0));
+  return lib.slice(0, 4) + '-' + String(max + 1).padStart(4, '0');
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  if (!$('classe').value) return alert('Aucune classe pour cet établissement et cette année. Créez-la d\'abord.');
+  const nom = $('nom').value.trim(), prenom = $('prenom').value.trim();
+  if (!nom || !prenom || !$('sexe').value || !$('naiss').value) return alert('Remplissez les champs obligatoires : nom, prénom, sexe, date de naissance.');
+  const d = {
+    etablissement_id: $('etab').value, annee_id: $('annee').value, classe_id: $('classe').value,
+    nom, postnom: nul($('postnom').value), prenom, sexe: $('sexe').value,
+    date_naissance: $('naiss').value, ecole_provenance: nul($('ecole').value), photo: photo || null
+  };
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) {
+      const { error } = await sb.from('inscriptions').update(d).eq('id', eid);
+      if (error) throw error;
+    } else {
+      let essai = 0, err = null;
+      while (essai < 3) {
+        const mat = await matricule(d.etablissement_id, d.annee_id);
+        const { error } = await sb.from('inscriptions').insert({ ...d, matricule: mat });
+        if (!error) { err = null; break; }
+        err = error; essai++;
+        if (error.code !== '23505') break;
+      }
+      if (err) throw err;
+    }
+    notifier(eid ? '✔ Élève modifié' : '✔ Élève inscrit');
+    reinit(); await charger();
+  } catch (x) {
+    erreur(x.code === '23505' ? 'Ce matricule existe déjà pour cet établissement et cette année.' : 'Enregistrement impossible : ' + esc(x.message || x));
+  }
+  b.disabled = false;
+}
+
+function reinit() {
+  const e = $('etab').value;
+  $('f').reset(); photo = ''; eid = null;
+  $('etab').value = e; $('annee').value = anneeDefaut();
+  $('t').textContent = 'Nouvelle inscription'; $('ann').style.display = 'none';
+  majClasses(); majAge(); apercu();
+}
+function modifier(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  $('etab').value = x.etablissement_id; $('annee').value = x.annee_id; majClasses();
+  $('classe').value = x.classe_id; majOption();
+  $('nom').value = x.nom || ''; $('postnom').value = x.postnom || ''; $('prenom').value = x.prenom || '';
+  $('sexe').value = x.sexe || ''; $('ecole').value = x.ecole_provenance || '';
+  $('naiss').value = x.date_naissance || ''; majAge();
+  photo = x.photo || ''; apercu();
+  eid = id; $('t').textContent = 'Modifier — ' + x.matricule; $('ann').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function supprimer(id) {
+  erreur('');
+  if (!confirm('Supprimer cet élève ?')) return;
+  const { error } = await sb.from('inscriptions').delete().eq('id', id);
+  if (error) return erreur(error.code === '23503'
+    ? 'Suppression impossible : cet élève est lié à d\'autres données (parent, notes…).'
+    : 'Suppression impossible : ' + esc(error.message));
+  await charger();
+}
+
+const filtrees = () => {
+  const q = $('q').value.toLowerCase();
+  return L.filter(x => [x.matricule, x.nom, x.postnom, x.prenom, cl(x.classe_id).nom, cl(x.classe_id).option_faculte, x.ecole_provenance]
+    .some(v => String(v || '').toLowerCase().includes(q)));
+};
+function rendu() {
+  const t = filtrees();
+  $('total').textContent = t.length;
+  $('liste').innerHTML = t.length ? t.map(x => `
+  <div class="card el">
+    ${x.photo ? `<img src="${esc(x.photo)}" alt="">` : `<div class="av">${esc((x.prenom || x.nom || '?')[0].toUpperCase())}</div>`}
+    <div class="info"><b>${esc(x.nom)} ${esc(x.postnom)} ${esc(x.prenom)}</b>
+      <small>${esc(x.matricule)} · ${x.sexe === 'M' ? 'Garçon' : 'Fille'} · ${calcAge(x.date_naissance)} ans</small>
+      <small>${esc(cl(x.classe_id).nom || '—')}${cl(x.classe_id).option_faculte ? ' · ' + esc(cl(x.classe_id).option_faculte) : ''} · ${esc(nA(x.annee_id))}</small>
+      <small>🏫 ${esc(nE(x.etablissement_id))}</small>
+      ${x.ecole_provenance ? `<small>Provenance : ${esc(x.ecole_provenance)}</small>` : ''}</div>
+    ${GERE ? `<div class="b"><button class="sec" data-a="m" data-id="${esc(x.id)}">✎</button><button class="del" data-a="s" data-id="${esc(x.id)}">✕</button></div>` : ''}
+  </div>`).join('') : '<p style="text-align:center;opacity:.6">Aucun élève</p>';
+}
+function exporter() {
+  const t = filtrees();
+  if (!t.length) return notifier('Aucun élève à exporter');
+  const h = ['Matricule', 'Nom', 'Postnom', 'Prénom', 'Sexe', 'Naissance', 'Âge', 'Établissement', 'Année', 'Classe', 'Option', 'École de provenance'];
+  const r = t.map(x => [x.matricule, x.nom, x.postnom, x.prenom, x.sexe, x.date_naissance, calcAge(x.date_naissance), nE(x.etablissement_id), nA(x.annee_id),
+    cl(x.classe_id).nom, cl(x.classe_id).option_faculte, x.ecole_provenance].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'eleves_kalasa.csv'; a.click();
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('ann').addEventListener('click', reinit);
+$('bphoto').addEventListener('click', () => $('fichier').click());
+$('fichier').addEventListener('change', e => choisirPhoto(e.target));
+$('naiss').addEventListener('change', majAge);
+$('classe').addEventListener('change', majOption);
+$('etab').addEventListener('change', () => { majClasses(); if (!eid) charger(); });
+$('annee').addEventListener('change', majClasses);
+$('filtre').addEventListener('change', charger);
+$('q').addEventListener('input', rendu);
+$('bexp').addEventListener('click', exporter);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  if (b.dataset.a === 'm') modifier(b.dataset.id);
+  if (b.dataset.a === 's') supprimer(b.dataset.id);
+});
+await init();
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
