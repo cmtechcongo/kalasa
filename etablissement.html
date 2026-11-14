@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Établissements</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.el{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.el small{display:block;opacity:.75;margin-top:2px}
+.nv{display:flex;flex-wrap:wrap;gap:8px}
+.nv label{display:flex;align-items:center;gap:6px;margin:0;padding:10px 14px;border:1px solid #8885;border-radius:20px;font-size:.9rem;opacity:1;cursor:pointer}
+.nv input{width:auto;min-height:0;accent-color:var(--m)}
+.nv label:has(input:checked){background:var(--m);color:#fff;border-color:var(--m)}
+.warn{color:#dc2626;font-size:.9rem;word-break:break-word;display:none;margin-bottom:10px}
+</style></head>
+<body>
+<header>🎓 KALASA</header>
+<nav id="nav"><a href="index.html">← Accueil</a></nav>
+<main>
+<p class="warn" id="warn" role="alert"></p>
+<form class="card" id="f" novalidate>
+  <h2 id="t">Nouvel établissement</h2>
+
+  <label>N°ID *</label>
+  <input id="numid">
+
+  <label>Province éducationnelle</label>
+  <select id="province">
+    <option>Kasaî oriental</option>
+    <option>Kinshasa</option>
+    <option selected>Kasaî central</option>
+    <option>Lomami</option>
+  </select>
+
+  <label>Ville *</label>
+  <input id="ville">
+
+  <label>Commune/TER. *</label>
+  <input id="commune">
+
+  <label>Nom *</label>
+  <input id="nom">
+
+  <label>Code</label>
+  <input id="code">
+
+  <label>N° Permanent</label>
+  <input id="numerpermenant">
+
+  <label>Niveaux * (un ou plusieurs)</label>
+  <div class="nv" id="niveaux"></div>
+
+  <label>Adresse</label>
+  <input id="adresse">
+
+  <label>Téléphone</label>
+  <input id="tel" type="tel">
+
+  <label>Chef d'établissement</label>
+  <input id="dir">
+
+  <div class="acts">
+    <button id="bok">Enregistrer</button>
+    <button type="button" class="sec" id="ann" style="display:none">Annuler</button>
+  </div>
+</form>
+<div id="liste"></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+const C = await exigerSession(['admin', 'directeur']);
+const ADMIN = C.role === 'admin';
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// champ du formulaire -> colonne de la table
+const COL = { numid: 'numid', province: 'province', ville: 'ville', commune: 'commune', nom: 'nom', code: 'code',
+  numerpermenant: 'numero_permanent', adresse: 'adresse', tel: 'telephone', dir: 'chef' };
+const F = Object.keys(COL);
+const DEF = { province: 'Kasaî central' };
+const OBL = ['numid', 'ville', 'commune', 'nom'];
+const NIV = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Cycle terminal', 'Humanité', 'Université'];
+
+$('niveaux').innerHTML = NIV.map(n => `<label><input type="checkbox" value="${n}"> ${n}</label>`).join('');
+const getNiv = () => [...document.querySelectorAll('#niveaux input:checked')].map(i => i.value);
+const setNiv = a => document.querySelectorAll('#niveaux input').forEach(i => i.checked = a.includes(i.value));
+
+let L = [], eid = null;
+const erreur = t => { const w = $('warn'); w.textContent = t; w.style.display = t ? 'block' : 'none'; };
+
+async function charger() {
+  erreur('');
+  const { data, error } = await sb.from('etablissements').select('*').order('nom');
+  if (error) { erreur('Lecture impossible : ' + error.message); L = []; }
+  else L = data || [];
+  rendu();
+}
+
+async function enregistrer(e) {
+  e.preventDefault(); erreur('');
+  if (!eid && !ADMIN) return alert("Seul l'administrateur peut créer un établissement.");
+
+  const d = {};
+  F.forEach(c => d[COL[c]] = $(c).value.trim());
+  const vide = OBL.find(c => !d[COL[c]]);
+  if (vide) { $(vide).focus(); return alert('Veuillez remplir le champ obligatoire : ' + vide); }
+  const niveaux = getNiv();
+  if (!niveaux.length) return alert('Choisissez au moins un niveau.');
+  d.niveaux = niveaux;
+  ['code', 'numero_permanent', 'adresse', 'telephone', 'chef'].forEach(k => { if (!d[k]) d[k] = null; });
+
+  if (L.some(x => x.numid === d.numid && x.id !== eid)) return alert('Ce N°ID existe déjà.');
+
+  const b = $('bok'); b.disabled = true;
+  try {
+    if (eid) {
+      const { error } = await sb.from('etablissements').update(d).eq('id', eid);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from('etablissements').insert({ ...d, statut: true });
+      if (error) throw error;
+    }
+    reinit(); await charger();
+  } catch (x) {
+    erreur(x.code === '23505' ? 'Ce N°ID ou ce code existe déjà.' : 'Enregistrement impossible : ' + (x.message || x));
+  }
+  b.disabled = false;
+}
+
+function reinit() {
+  F.forEach(c => $(c).value = DEF[c] ?? '');
+  setNiv([]); eid = null;
+  $('t').textContent = 'Nouvel établissement';
+  $('ann').style.display = 'none';
+  $('f').style.display = ADMIN ? 'block' : 'none';
+}
+
+function modifier(id) {
+  const x = L.find(e => e.id === id); if (!x) return;
+  F.forEach(c => $(c).value = x[COL[c]] ?? DEF[c] ?? '');
+  setNiv(x.niveaux || []);
+  eid = id;
+  $('f').style.display = 'block';
+  $('t').textContent = 'Modifier';
+  $('ann').style.display = 'block';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function supprimer(id) {
+  if (!ADMIN) return alert("Seul l'administrateur peut supprimer un établissement.");
+  erreur('');
+  const p = await sb.from('personnel').select('id', { count: 'exact', head: true }).eq('etablissement_id', id);
+  const u = await sb.from('utilisateur_etablissements').select('utilisateur_id', { count: 'exact', head: true }).eq('etablissement_id', id);
+  if (p.error || u.error) return erreur('Vérification impossible : ' + (p.error || u.error).message);
+  if ((p.count || 0) > 0 || (u.count || 0) > 0)
+    return alert('Suppression impossible : des membres du personnel ou des comptes sont liés à cet établissement.');
+  if (!confirm('Supprimer cet établissement ?')) return;
+  const { error } = await sb.from('etablissements').delete().eq('id', id);
+  if (error) return erreur(error.code === '23503'
+    ? 'Suppression impossible : des données sont encore liées à cet établissement.'
+    : 'Suppression impossible : ' + error.message);
+  await charger();
+}
+
+function rendu() {
+  $('liste').innerHTML = L.length ? L.map(e => `
+  <div class="card el"><div>
+    <b>${esc(e.nom)}</b>
+    <small>${esc((e.niveaux || []).join(' · ') || 'Niveau non défini')}${e.code ? ' · Code ' + esc(e.code) : ''}${e.numid ? ' · ID ' + esc(e.numid) : ''}</small>
+    ${e.numero_permanent ? `<small>N° Permanent : ${esc(e.numero_permanent)}</small>` : ''}
+    <small>🗺️ ${esc(e.province || '')}${e.ville ? ' · ' + esc(e.ville) : ''}${e.commune ? ' · ' + esc(e.commune) : ''}</small>
+    ${e.adresse ? `<small>📍 ${esc(e.adresse)}</small>` : ''}
+    ${e.telephone ? `<small>📞 ${esc(e.telephone)}</small>` : ''}
+    ${e.chef ? `<small>👤 ${esc(e.chef)}</small>` : ''}
+  </div>
+  <div class="b">
+    <button class="sec" data-a="m" data-id="${esc(e.id)}">✎</button>
+    ${ADMIN ? `<button class="del" data-a="s" data-id="${esc(e.id)}">✕</button>` : ''}
+  </div></div>`).join('')
+  : '<p style="text-align:center;opacity:.6">Aucun établissement</p>';
+}
+
+$('f').addEventListener('submit', enregistrer);
+$('ann').addEventListener('click', reinit);
+$('liste').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+  if (b.dataset.a === 'm') modifier(b.dataset.id);
+  if (b.dataset.a === 's') supprimer(b.dataset.id);
+});
+
+reinit();
+await charger();
+</script>
+</body></html>
