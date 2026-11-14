@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>KALASA — Espace élève</title>
+<style>
+:root{--m:#2563eb;--bg:#f5f7fb;--c:#fff;--t:#1b2430}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1520;--c:#18212f;--t:#e8edf5}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;
+  padding:24px 14px calc(24px + env(safe-area-inset-bottom,0px));font-family:system-ui,sans-serif;background:var(--bg);color:var(--t)}
+.logo{text-align:center}.logo span{font-size:2.6rem}.logo h1{margin:2px 0 0;letter-spacing:.12em;font-size:1.5rem}
+.box{width:100%;max-width:400px;background:var(--c);border-radius:16px;padding:18px;box-shadow:0 4px 16px #0002}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{flex:1;padding:11px 6px;border:0;border-radius:10px;background:#8883;color:inherit;font-size:.88rem;cursor:pointer}
+.tabs button.on{background:var(--m);color:#fff;font-weight:600}
+label{display:block;font-size:.8rem;margin:11px 0 4px;opacity:.8}
+input,select{width:100%;padding:12px;border:1px solid #8885;border-radius:10px;font-size:1rem;background:transparent;color:inherit}
+select option{color:#000}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.go{width:100%;margin-top:14px;padding:14px;border:0;border-radius:10px;background:var(--m);color:#fff;font-size:1.02rem;font-weight:600;cursor:pointer}
+.go:disabled{opacity:.55}
+.err{min-height:1.3em;margin:8px 0 0;color:#dc2626;font-size:.88rem;word-break:break-word}.ok{color:#16a34a;font-size:.92rem;margin:8px 0 0}
+.sub{margin:0 0 4px;font-size:.85rem;opacity:.75}a{color:inherit}
+/* Activation en 2 étapes */
+fieldset{border:0;margin:0;padding:0;min-width:0}
+fieldset:disabled{opacity:.45}
+.etape{margin:16px 0 0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+#code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.5rem;font-weight:700;letter-spacing:.35em;text-align:center;
+  background:#2563eb14;border-color:var(--m)}
+</style></head><body>
+<div class="logo"><span>🎓</span><h1>KALASA</h1></div>
+
+<div class="box">
+  <div class="tabs"><button id="ta" class="on">Activer mon compte</button><button id="tb">Je ne suis pas inscrit(e)</button></div>
+
+  <form id="fa" autocomplete="off" novalidate onsubmit="return false">
+    <p class="sub">Vous devez déjà être inscrit(e). Saisissez les informations de votre fiche : votre code d'activation s'affiche automatiquement.</p>
+
+    <p class="etape">Étape 1 — Votre inscription</p>
+    <label>Matricule *</label><input id="mat" placeholder="ex : 2025-0001" autocapitalize="characters" autocomplete="off">
+    <label>Nom de famille *</label><input id="nom" autocomplete="off">
+    <label>Date de naissance *</label><input id="naiss" type="date">
+    <label>Code d'activation (automatique)</label><input id="code" readonly tabindex="-1" placeholder="······" aria-live="polite">
+    <p class="err" id="ea" role="alert"></p><p class="ok" id="sa"></p>
+
+    <fieldset id="f2" disabled>
+      <p class="etape">Étape 2 — Votre accès</p>
+      <label>Choisissez un identifiant *</label><input id="login" autocapitalize="none" autocomplete="username" placeholder="ex : junior.m">
+      <label>Mot de passe * (8 caractères min.)</label><input id="m1" type="password" autocomplete="new-password">
+      <label>Confirmer le mot de passe *</label><input id="m2" type="password" autocomplete="new-password">
+      <p class="err" id="eb2" role="alert"></p>
+      <button class="go" id="ba" type="button">Activer mon compte</button>
+    </fieldset>
+  </form>
+
+  <form id="fb" autocomplete="off" style="display:none" onsubmit="return false">
+    <p class="sub">Pas encore inscrit(e) ? Envoyez votre demande : le secrétariat la validera.</p>
+    <div class="r2"><div><label>Nom *</label><input id="bn"></div><div><label>Postnom</label><input id="bp"></div></div>
+    <label>Prénom *</label><input id="bpr">
+    <div class="r2"><div><label>Sexe *</label><select id="bs"><option value="">Choisir…</option><option value="M">Masculin</option><option value="F">Féminin</option></select></div>
+    <div><label>Naissance *</label><input id="bd" type="date"></div></div>
+    <label>Établissement souhaité *</label><select id="etb"><option value="">Chargement…</option></select>
+    <label>Classe souhaitée</label><input id="cv" placeholder="ex : 1ère année">
+    <label>École de provenance</label><input id="be">
+    <label>Téléphone d'un parent</label><input id="bt" type="tel">
+    <p class="err" id="eb" role="alert"></p><p class="ok" id="okb"></p>
+    <button class="go" id="bs2" type="button">Envoyer ma demande</button>
+  </form>
+</div>
+<p style="font-size:.85rem"><a href="login.html">← Retour à la connexion</a></p>
+
+<script type="module">
+/* Nom (slug) de la fonction activer_eleve dans son adresse /functions/v1/... */
+const FONCTION = 'activer_eleve';
+
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+let K;
+try { K = await import('./kalasa-db.js'); }
+catch (e) { $('ea').textContent = 'Erreur de chargement de kalasa-db.js : ' + e.message; throw e; }
+const { SUPABASE_URL, SUPABASE_KEY, sb, emailPour, ouvrirSession, garder, ACCUEIL } = K;
+
+/* Appel de la fonction serveur */
+async function appeler(corps) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/${FONCTION}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify(corps)
+    });
+    let j = {};
+    try { j = await r.json(); } catch {}
+    const message = j.message || (r.status === 401 ? 'Service d\'activation non autorisé : désactivez « Verify JWT » sur la fonction.' : r.status === 404 ? 'Service d\'activation introuvable : vérifiez le nom de la fonction.' : r.ok ? '' : 'Erreur ' + r.status);
+    return { ...j, ok: r.ok && j.success !== false, status: r.status, message };
+  } catch {
+    return { ok: false, status: 0, message: 'Connexion impossible : vérifiez votre connexion Internet.' };
+  }
+}
+
+function onglet(n) {
+  $('fa').style.display = n === 'a' ? 'block' : 'none'; $('fb').style.display = n === 'b' ? 'block' : 'none';
+  $('ta').classList.toggle('on', n === 'a'); $('tb').classList.toggle('on', n === 'b');
+}
+$('ta').onclick = () => onglet('a'); $('tb').onclick = () => onglet('b');
+
+/* ---------- A. Activation : inscription vérifiée → code automatique → identifiant + mot de passe ---------- */
+const ea = $('ea'), sa = $('sa'), eb2 = $('eb2'), f2 = $('f2');
+let derniere = '', enCours = false;
+const cleSaisie = () => [$('mat').value.trim().toLowerCase(), $('nom').value.trim().toLowerCase(), $('naiss').value].join('|');
+const complet = () => $('mat').value.trim() && $('nom').value.trim() && $('naiss').value;
+
+/* Toute modification des 3 champs verrouille l'étape 2 et efface le code */
+function verrouiller() { $('code').value = ''; f2.disabled = true; ea.textContent = ''; sa.textContent = ''; eb2.textContent = ''; derniere = ''; }
+['mat', 'nom', 'naiss'].forEach(id => $(id).addEventListener('input', verrouiller));
+
+async function verifier() {
+  if (!complet() || enCours) return;
+  const k = cleSaisie(); if (k === derniere) return;
+  enCours = true; ea.textContent = ''; sa.textContent = '⏳ Vérification…';
+  const r = await appeler({ action: 'verifier', matricule: $('mat').value.trim(), nom: $('nom').value.trim(), naissance: $('naiss').value });
+  enCours = false; sa.textContent = '';
+  if (!r.ok) { ea.textContent = r.message; return; }
+  derniere = k; $('code').value = r.code; f2.disabled = false;
+  sa.textContent = '✅ Inscription trouvée. Choisissez maintenant votre identifiant et votre mot de passe (le code est valable ' + (r.expire_minutes || 15) + ' minutes).';
+  $('login').focus();
+}
+['mat', 'nom', 'naiss'].forEach(id => $(id).addEventListener('change', verifier));
+
+async function activer() {
+  const btn = $('ba'); eb2.textContent = '';
+  const login = $('login').value.trim();
+  if (login.length < 3) { eb2.textContent = 'L\'identifiant doit contenir au moins 3 caractères.'; return; }
+  if ($('m1').value.length < 8) { eb2.textContent = 'Le mot de passe doit contenir au moins 8 caractères.'; return; }
+  if ($('m1').value !== $('m2').value) { eb2.textContent = 'La confirmation ne correspond pas.'; return; }
+  btn.disabled = true; btn.textContent = 'Activation…';
+  try {
+    const r = await appeler({
+      action: 'activer', matricule: $('mat').value.trim(), nom: $('nom').value.trim(), naissance: $('naiss').value,
+      code: $('code').value, identifiant: login, mot_de_passe: $('m1').value
+    });
+    if (!r.ok) throw new Error(r.message);
+
+    /* Connexion automatique : même chemin que login.html */
+    try {
+      const email = await emailPour(login);
+      const { error } = await sb.auth.signInWithPassword({ email, password: $('m1').value });
+      if (error) throw error;
+      const p = await ouvrirSession();
+      if (!p || !p.actif) throw new Error('profil');
+      const duree = 12 * 3600e3;
+      garder({ ...p, etabId: p.etablissements[0] ? p.etablissements[0].id : null, duree, exp: Date.now() + duree });
+      location.replace(ACCUEIL[p.role] || 'index.html');
+    } catch {
+      sa.textContent = '✅ Compte activé. Connectez-vous avec votre identifiant.';
+      setTimeout(() => location.replace('login.html'), 1500);
+    }
+  } catch (x) { eb2.textContent = x.message; btn.disabled = false; btn.textContent = 'Activer mon compte'; }
+}
+$('ba').addEventListener('click', activer);
+
+/* ---------- B. Demande d'inscription (validée ensuite par le secrétariat) ---------- */
+(async () => {
+  const r = await appeler({ action: 'etablissements' });
+  const l = r.ok ? (r.etablissements || []) : [];
+  $('etb').innerHTML = l.length
+    ? '<option value="">Choisir…</option>' + l.map(x => `<option value="${esc(x.id)}">${esc(x.nom)}</option>`).join('')
+    : '<option value="">Aucun établissement</option>';
+  if (!l.length) $('eb').textContent = r.ok ? 'L\'école n\'est pas encore configurée.' : r.message;
+})();
+
+$('bs2').addEventListener('click', async () => {
+  const err = $('eb'), ok = $('okb'), btn = $('bs2'); err.textContent = ''; ok.textContent = '';
+  const d = {
+    action: 'demander', nom: $('bn').value.trim(), postnom: $('bp').value.trim(), prenom: $('bpr').value.trim(),
+    sexe: $('bs').value, naissance: $('bd').value, etablissement_id: $('etb').value,
+    classe_souhaitee: $('cv').value.trim(), ecole_provenance: $('be').value.trim(), telephone: $('bt').value.trim()
+  };
+  if (!d.nom || !d.prenom || !d.sexe || !d.naissance || !d.etablissement_id) { err.textContent = 'Remplissez les champs obligatoires (*).'; return; }
+  btn.disabled = true;
+  const r = await appeler(d);
+  btn.disabled = false;
+  if (!r.ok) { err.textContent = r.message; return; }
+  $('fb').reset();
+  ok.textContent = '✅ Demande envoyée. Présentez-vous au secrétariat : après validation, vous recevrez votre matricule et pourrez activer votre compte.';
+});
+</script>
+</body></html>
