@@ -17,25 +17,24 @@
 <main>
   <div class="warn" id="warn"></div>
   <div class="card">
-    <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom de l'utilisateur, table, n° d'enregistrement…">
-    <div class="g">
-      <div><label>Type</label>
-        <select id="f"><option value="">Tous</option>
-          <option value="etablissement">Établissements</option><option value="classe">Classes et années</option>
-          <option value="eleve">Élèves</option><option value="personnel">Personnel</option>
-          <option value="parent">Parents</option><option value="finance">Finances</option>
-          <option value="compte">Comptes</option></select></div>
-      <div><label>Action</label>
-        <select id="fa"><option value="">Toutes</option><option value="INSERT">Créations</option>
-          <option value="UPDATE">Modifications</option><option value="DELETE">Suppressions</option></select></div>
-    </div>
+    <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom, action, cible…">
+    <label>Type d'action</label>
+    <select id="f"><option value="">Toutes</option>
+      <option value="note">Notes</option><option value="bulletin">Bulletins</option>
+      <option value="matiere">Matières</option><option value="periode">Périodes</option>
+      <option value="paiement">Paiements</option><option value="frais">Frais</option>
+      <option value="depense">Dépenses</option><option value="salaire">Salaires</option>
+      <option value="eleve">Élèves</option><option value="classe">Classes</option>
+      <option value="annee">Années</option><option value="etablissement">Établissements</option>
+      <option value="personnel">Personnel</option><option value="parent">Parents</option>
+      <option value="compte">Comptes</option><option value="droits">Droits</option>
+      <option value="connexion">Connexions</option></select>
     <label>Établissement</label><select id="fe"></select>
     <div class="g">
       <div><label>Du</label><input type="date" id="d1"></div>
       <div><label>Au</label><input type="date" id="d2"></div>
     </div>
     <div class="acts"><button class="sec" id="bexp">⬇ Exporter (CSV)</button></div>
-    <small style="display:block;opacity:.7;margin-top:8px">🔒 Le journal est inviolable : il ne peut être ni modifié ni vidé.</small>
   </div>
   <div id="liste"></div>
   <div class="acts"><button class="sec" id="plus" style="display:none">Charger plus</button></div>
@@ -48,64 +47,42 @@ await exigerSession(['admin']);
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
-
-const GROUPES = {
-  etablissement: ['etablissements'],
-  classe: ['classes', 'annees_scolaires'],
-  eleve: ['inscriptions'],
-  personnel: ['personnel'],
-  parent: ['parents', 'parent_eleves'],
-  finance: ['frais', 'paiements', 'depenses', 'salaires'],
-  compte: ['profils', 'utilisateur_etablissements']
-};
-const TABLES = { etablissements: 'Établissement', annees_scolaires: 'Année scolaire', classes: 'Classe', personnel: 'Personnel', inscriptions: 'Élève',
-  parents: 'Parent', parent_eleves: 'Lien parent-élève', frais: 'Frais', paiements: 'Paiement', depenses: 'Dépense', salaires: 'Salaire du personnel',
-  profils: 'Compte utilisateur', utilisateur_etablissements: 'Établissements d\'un compte' };
-const ACTIONS = { INSERT: ['Création', 'c'], UPDATE: ['Modification', 'm'], DELETE: ['Suppression', 's'] };
+const CLS = { creation: 'c', modification: 'm', suppression: 's', connexion: 'l', paiement: 'm', note: 'm', droits: 'l', activation: 'c', verrouillage: 'l', deverrouillage: 'l', export_pdf: 'l' };
 const PAGE = 50;
 
 let ETABS = [], L = [], fini = false, tok = 0;
 const nE = id => (ETABS.find(x => x.id === id) || {}).nom || '';
-
-/* Libellé lisible de l'enregistrement concerné */
-function cible(e) {
-  const d = e.apres || e.avant || {};
-  const nomP = [d.nom, d.postnom, d.prenom].filter(Boolean).join(' ');
-  const lib = d.nom_complet || nomP || d.lib || d.motif || d.recu || d.identifiant || d.matricule || (e.enregistrement_id ? String(e.enregistrement_id).slice(0, 8) : '');
-  return (TABLES[e.table_nom] || e.table_nom) + (lib ? ' — ' + lib : '');
-}
-const val = v => { const s = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '∅'); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
+const court = v => { const s = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '∅'); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
 const IGNORES = ['id', 'date_creation', 'etablissement_id', 'annee_id', 'classe_id', 'inscription_id', 'personnel_id', 'utilisateur_id', 'frais_id', 'parent_id', 'empreinte'];
-/* Résumé : champs modifiés (avant → après) ou principaux champs */
-function resume(e) {
-  const a = e.avant || {}, n = e.apres || {};
-  if (e.action === 'UPDATE') {
-    const cles = [...new Set([...Object.keys(a), ...Object.keys(n)])].filter(k => k !== 'date_creation' && JSON.stringify(a[k]) !== JSON.stringify(n[k]));
-    return cles.length ? cles.map(k => `${k} : ${val(a[k])} → ${val(n[k])}`).join(' · ') : '(photo ou donnée non affichée)';
+
+/* Détails lisibles : modifications « champ : avant → après », sinon les principaux champs, sinon le JSON brut */
+function resume(d) {
+  if (d === null || d === undefined) return '';
+  if (typeof d !== 'object') return String(d);
+  if (d.modifie && typeof d.modifie === 'object') {
+    const k = Object.keys(d.modifie);
+    return k.length ? k.map(c => `${c} : ${court(d.modifie[c].avant)} → ${court(d.modifie[c].apres)}`).join(' · ') : '(donnée non affichée)';
   }
-  const d = e.action === 'INSERT' ? n : a;
-  return Object.keys(d).filter(k => !IGNORES.includes(k) && d[k] !== null && d[k] !== '').slice(0, 8).map(k => `${k} : ${val(d[k])}`).join(' · ');
+  const src = d.apres && typeof d.apres === 'object' ? d.apres : d.avant && typeof d.avant === 'object' ? d.avant : null;
+  if (src) return Object.keys(src).filter(k => !IGNORES.includes(k) && src[k] !== null && src[k] !== '').slice(0, 8).map(k => `${k} : ${court(src[k])}`).join(' · ');
+  return JSON.stringify(d);
 }
 
-/* Requête avec les filtres choisis */
 function requete() {
-  let r = sb.from('journal_audit').select('*').order('id', { ascending: false });
-  const g = $('f').value; if (g) r = r.in('table_nom', GROUPES[g]);
-  const a = $('fa').value; if (a) r = r.eq('action', a);
+  let r = sb.from('journal_audit').select('*').order('date_action', { ascending: false }).order('id', { ascending: false });
+  const f = $('f').value; if (f) r = r.ilike('action', f + '.%');
   const e = $('fe').value; if (e) r = r.eq('etablissement_id', e);
   if ($('d1').value) r = r.gte('date_action', new Date($('d1').value + 'T00:00:00').toISOString());
   if ($('d2').value) r = r.lte('date_action', new Date($('d2').value + 'T23:59:59.999').toISOString());
   const t = $('q').value.trim().replace(/[,()*%"\\]/g, ' ').trim();
-  if (t) r = r.or(`utilisateur_nom.ilike.%${t}%,table_nom.ilike.%${t}%,enregistrement_id.ilike.%${t}%`);
+  if (t) r = r.or(`utilisateur_nom.ilike.%${t}%,action.ilike.%${t}%,cible.ilike.%${t}%`);
   return r;
 }
 
 async function charger(debut) {
   const t = ++tok;
   if (debut) { L = []; fini = false; }
-  let r = requete().limit(PAGE);
-  if (!debut && L.length) r = r.lt('id', L[L.length - 1].id);
-  const { data, error } = await r;
+  const { data, error } = await requete().range(L.length, L.length + PAGE - 1);
   if (t !== tok) return;
   if (error) { erreur('Lecture impossible : ' + esc(error.message)); return; }
   erreur('');
@@ -116,10 +93,10 @@ async function charger(debut) {
 
 function rendu() {
   $('liste').innerHTML = L.length ? L.map(e => {
-    const [lib, cls] = ACTIONS[e.action] || [e.action, ''];
-    return `<div class="card it"><span class="act ${cls}">${esc(lib)}</span><b>${esc(cible(e))}</b>
-      <small>${new Date(e.date_action).toLocaleString('fr-FR')} · ${esc(e.utilisateur_nom || 'Système')}${e.utilisateur_role ? ' (' + esc(e.utilisateur_role) + ')' : ''}${e.etablissement_id ? ' · 🏫 ' + esc(nE(e.etablissement_id)) : ''}</small>
-      <div class="det">${esc(resume(e))}</div></div>`;
+    const cls = CLS[String(e.action).split('.')[1]] || CLS[String(e.action).split('.')[0]] || '';
+    return `<div class="card it"><span class="act ${cls}">${esc(e.action)}</span><b>${esc(e.cible)}</b>
+      <small>${new Date(e.date_action).toLocaleString('fr-FR')} · ${esc(e.utilisateur_nom || 'Système')}${e.etablissement_id ? ' · 🏫 ' + esc(nE(e.etablissement_id)) : ''}</small>
+      <div class="det">${esc(resume(e.details))}</div></div>`;
   }).join('') : '<p style="text-align:center;opacity:.6">Aucune entrée</p>';
   $('plus').style.display = fini || !L.length ? 'none' : 'block';
 }
@@ -136,8 +113,8 @@ async function exporter() {
   } catch (x) { return erreur('Export impossible : ' + esc(x.message || x)); }
   if (!out.length) return alert('Rien à exporter');
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [['Date', 'Utilisateur', 'Rôle', 'Action', 'Élément', 'Établissement', 'Détail'].join(';')]
-    .concat(out.map(e => [e.date_action, e.utilisateur_nom || 'Système', e.utilisateur_role || '', (ACTIONS[e.action] || [e.action])[0], cible(e), nE(e.etablissement_id), resume(e)].map(q).join(';')));
+  const rows = [['Date', 'Utilisateur', 'Action', 'Cible', 'Établissement', 'Détail'].join(';')]
+    .concat(out.map(e => [e.date_action, e.utilisateur_nom || 'Système', e.action, e.cible, nE(e.etablissement_id), resume(e.details)].map(q).join(';')));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
   a.download = 'journal_audit.csv'; a.click();
@@ -145,7 +122,7 @@ async function exporter() {
 
 let minuterie = null;
 $('q').addEventListener('input', () => { clearTimeout(minuterie); minuterie = setTimeout(() => charger(true), 300); });
-['f', 'fa', 'fe', 'd1', 'd2'].forEach(i => $(i).addEventListener('change', () => charger(true)));
+['f', 'fe', 'd1', 'd2'].forEach(i => $(i).addEventListener('change', () => charger(true)));
 $('plus').addEventListener('click', () => charger(false));
 $('bexp').addEventListener('click', exporter);
 
