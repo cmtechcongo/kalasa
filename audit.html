@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Journal d'audit</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+.act{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:99px;background:#8883;margin-right:6px}
+.act.c{background:#16a34a;color:#fff}.act.m{background:#f59e0b;color:#fff}
+.act.s{background:#dc2626;color:#fff}.act.l{background:#2563eb;color:#fff}
+.it{padding:10px 0;border-bottom:1px solid #8883}.it small{display:block;opacity:.75;margin-top:3px}
+.det{font-size:.82rem;opacity:.85;margin-top:4px;background:#8882;padding:6px 8px;border-radius:6px;word-break:break-word}
+.warn{word-break:break-word}
+</style></head><body>
+<header>🎓 KALASA</header>
+<nav id="nav"></nav>
+<main>
+  <div class="warn" id="warn"></div>
+  <div class="card">
+    <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom de l'utilisateur, table, n° d'enregistrement…">
+    <div class="g">
+      <div><label>Type</label>
+        <select id="f"><option value="">Tous</option>
+          <option value="etablissement">Établissements</option><option value="classe">Classes et années</option>
+          <option value="eleve">Élèves</option><option value="personnel">Personnel</option>
+          <option value="parent">Parents</option><option value="finance">Finances</option>
+          <option value="compte">Comptes</option></select></div>
+      <div><label>Action</label>
+        <select id="fa"><option value="">Toutes</option><option value="INSERT">Créations</option>
+          <option value="UPDATE">Modifications</option><option value="DELETE">Suppressions</option></select></div>
+    </div>
+    <label>Établissement</label><select id="fe"></select>
+    <div class="g">
+      <div><label>Du</label><input type="date" id="d1"></div>
+      <div><label>Au</label><input type="date" id="d2"></div>
+    </div>
+    <div class="acts"><button class="sec" id="bexp">⬇ Exporter (CSV)</button></div>
+    <small style="display:block;opacity:.7;margin-top:8px">🔒 Le journal est inviolable : il ne peut être ni modifié ni vidé.</small>
+  </div>
+  <div id="liste"></div>
+  <div class="acts"><button class="sec" id="plus" style="display:none">Charger plus</button></div>
+</main>
+
+<script type="module">
+import { sb, exigerSession } from './kalasa-db.js';
+
+await exigerSession(['admin']);
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+
+const GROUPES = {
+  etablissement: ['etablissements'],
+  classe: ['classes', 'annees_scolaires'],
+  eleve: ['inscriptions'],
+  personnel: ['personnel'],
+  parent: ['parents', 'parent_eleves'],
+  finance: ['frais', 'paiements', 'depenses', 'salaires'],
+  compte: ['profils', 'utilisateur_etablissements']
+};
+const TABLES = { etablissements: 'Établissement', annees_scolaires: 'Année scolaire', classes: 'Classe', personnel: 'Personnel', inscriptions: 'Élève',
+  parents: 'Parent', parent_eleves: 'Lien parent-élève', frais: 'Frais', paiements: 'Paiement', depenses: 'Dépense', salaires: 'Salaire du personnel',
+  profils: 'Compte utilisateur', utilisateur_etablissements: 'Établissements d\'un compte' };
+const ACTIONS = { INSERT: ['Création', 'c'], UPDATE: ['Modification', 'm'], DELETE: ['Suppression', 's'] };
+const PAGE = 50;
+
+let ETABS = [], L = [], fini = false, tok = 0;
+const nE = id => (ETABS.find(x => x.id === id) || {}).nom || '';
+
+/* Libellé lisible de l'enregistrement concerné */
+function cible(e) {
+  const d = e.apres || e.avant || {};
+  const nomP = [d.nom, d.postnom, d.prenom].filter(Boolean).join(' ');
+  const lib = d.nom_complet || nomP || d.lib || d.motif || d.recu || d.identifiant || d.matricule || (e.enregistrement_id ? String(e.enregistrement_id).slice(0, 8) : '');
+  return (TABLES[e.table_nom] || e.table_nom) + (lib ? ' — ' + lib : '');
+}
+const val = v => { const s = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '∅'); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
+const IGNORES = ['id', 'date_creation', 'etablissement_id', 'annee_id', 'classe_id', 'inscription_id', 'personnel_id', 'utilisateur_id', 'frais_id', 'parent_id', 'empreinte'];
+/* Résumé : champs modifiés (avant → après) ou principaux champs */
+function resume(e) {
+  const a = e.avant || {}, n = e.apres || {};
+  if (e.action === 'UPDATE') {
+    const cles = [...new Set([...Object.keys(a), ...Object.keys(n)])].filter(k => k !== 'date_creation' && JSON.stringify(a[k]) !== JSON.stringify(n[k]));
+    return cles.length ? cles.map(k => `${k} : ${val(a[k])} → ${val(n[k])}`).join(' · ') : '(photo ou donnée non affichée)';
+  }
+  const d = e.action === 'INSERT' ? n : a;
+  return Object.keys(d).filter(k => !IGNORES.includes(k) && d[k] !== null && d[k] !== '').slice(0, 8).map(k => `${k} : ${val(d[k])}`).join(' · ');
+}
+
+/* Requête avec les filtres choisis */
+function requete() {
+  let r = sb.from('journal_audit').select('*').order('id', { ascending: false });
+  const g = $('f').value; if (g) r = r.in('table_nom', GROUPES[g]);
+  const a = $('fa').value; if (a) r = r.eq('action', a);
+  const e = $('fe').value; if (e) r = r.eq('etablissement_id', e);
+  if ($('d1').value) r = r.gte('date_action', new Date($('d1').value + 'T00:00:00').toISOString());
+  if ($('d2').value) r = r.lte('date_action', new Date($('d2').value + 'T23:59:59.999').toISOString());
+  const t = $('q').value.trim().replace(/[,()*%"\\]/g, ' ').trim();
+  if (t) r = r.or(`utilisateur_nom.ilike.%${t}%,table_nom.ilike.%${t}%,enregistrement_id.ilike.%${t}%`);
+  return r;
+}
+
+async function charger(debut) {
+  const t = ++tok;
+  if (debut) { L = []; fini = false; }
+  let r = requete().limit(PAGE);
+  if (!debut && L.length) r = r.lt('id', L[L.length - 1].id);
+  const { data, error } = await r;
+  if (t !== tok) return;
+  if (error) { erreur('Lecture impossible : ' + esc(error.message)); return; }
+  erreur('');
+  L = L.concat(data || []);
+  fini = (data || []).length < PAGE;
+  rendu();
+}
+
+function rendu() {
+  $('liste').innerHTML = L.length ? L.map(e => {
+    const [lib, cls] = ACTIONS[e.action] || [e.action, ''];
+    return `<div class="card it"><span class="act ${cls}">${esc(lib)}</span><b>${esc(cible(e))}</b>
+      <small>${new Date(e.date_action).toLocaleString('fr-FR')} · ${esc(e.utilisateur_nom || 'Système')}${e.utilisateur_role ? ' (' + esc(e.utilisateur_role) + ')' : ''}${e.etablissement_id ? ' · 🏫 ' + esc(nE(e.etablissement_id)) : ''}</small>
+      <div class="det">${esc(resume(e))}</div></div>`;
+  }).join('') : '<p style="text-align:center;opacity:.6">Aucune entrée</p>';
+  $('plus').style.display = fini || !L.length ? 'none' : 'block';
+}
+
+async function exporter() {
+  const out = [];
+  try {
+    for (let i = 0; i < 5000; i += 1000) {
+      const { data, error } = await requete().range(i, i + 999);
+      if (error) throw error;
+      out.push(...data);
+      if (data.length < 1000) break;
+    }
+  } catch (x) { return erreur('Export impossible : ' + esc(x.message || x)); }
+  if (!out.length) return alert('Rien à exporter');
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Date', 'Utilisateur', 'Rôle', 'Action', 'Élément', 'Établissement', 'Détail'].join(';')]
+    .concat(out.map(e => [e.date_action, e.utilisateur_nom || 'Système', e.utilisateur_role || '', (ACTIONS[e.action] || [e.action])[0], cible(e), nE(e.etablissement_id), resume(e)].map(q).join(';')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'journal_audit.csv'; a.click();
+}
+
+let minuterie = null;
+$('q').addEventListener('input', () => { clearTimeout(minuterie); minuterie = setTimeout(() => charger(true), 300); });
+['f', 'fa', 'fe', 'd1', 'd2'].forEach(i => $(i).addEventListener('change', () => charger(true)));
+$('plus').addEventListener('click', () => charger(false));
+$('bexp').addEventListener('click', exporter);
+
+const re = await sb.from('etablissements').select('id, nom').order('nom');
+ETABS = re.data || [];
+$('fe').innerHTML = '<option value="">Tous les établissements</option>' + ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
+await charger(true);
+</script>
+<script type="module" src="kalasa-ui.js"></script>
+</body></html>
