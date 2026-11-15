@@ -1,36 +1,314 @@
 <!DOCTYPE html>
 <html lang="fr"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.json">
 <title>KALASA — Accueil</title>
+<link rel="stylesheet" href="kalasa.css">
 <style>
-  body{margin:0;font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a}
-  header{background:#2563eb;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
-  header h1{margin:0;font-size:1.1rem;letter-spacing:2px}
-  button{background:#fff3;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-size:.9rem}
-  main{padding:16px;max-width:600px;margin:auto}
-  .carte{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
-  .carte h2{margin:0 0 8px;font-size:1rem}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stat>div{background:var(--c);border-radius:12px;padding:12px 4px;box-shadow:0 1px 4px #0002;font-size:.75rem}
+.stat b{display:block;font-size:1.4rem}.stat small{opacity:.7}
+.card .stat>div{box-shadow:none;background:#8882}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tile{display:block;background:var(--c);color:inherit;text-decoration:none;border-radius:12px;padding:14px;box-shadow:0 1px 4px #0002}
+.tile span{font-size:1.6rem}.tile b{display:block;margin-top:4px}.tile small{opacity:.7;font-size:.78rem}
+.step{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #8883;color:inherit;text-decoration:none}
+.step:last-child{border:0}
+.step i{font-style:normal;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#8883;font-size:.85rem;flex:none}
+.step.ok i{background:#16a34a;color:#fff}.step.ok{opacity:.65}.step.next{font-weight:700}.step.next i{background:var(--m);color:#fff}
+.bar{height:8px;background:#8883;border-radius:4px;margin-top:10px}.bar i{display:block;height:8px;border-radius:4px;background:#16a34a}
+.al{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #8883;color:inherit;text-decoration:none}
+.al:last-child{border:0}
+details.niv{border-bottom:1px solid #8883}
+details.niv:last-of-type{border:0}
+details.niv summary{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;cursor:pointer;list-style:none;font-size:.92rem}
+details.niv summary::-webkit-details-marker{display:none}
+details.niv summary>span::before{content:'▸ ';opacity:.6}
+details.niv[open] summary>span::before{content:'▾ '}
+details.niv small{opacity:.7;font-weight:400}
+.sub{display:flex;justify-content:space-between;padding:4px 0 4px 18px;font-size:.85rem;opacity:.85}
+.ti{margin:12px 0 2px;font-size:.9rem}
 </style></head>
+
 <body>
-<header><h1>🎓 KALASA</h1><button id="out">Déconnexion</button></header>
+<header><span>🎓 KALASA <small id="sub" style="font-weight:400;opacity:.85;font-size:.8rem"></small></span></header>
+<nav id="nav"></nav>
 <main>
-  <div class="carte"><h2 id="nom">Chargement…</h2><div id="role"></div></div>
-  <div class="carte"><h2>Établissements autorisés</h2><ul id="etabs"></ul></div>
+  <div class="warn" id="warn"></div>
+  <div id="staff">
+    <div class="card"><div class="g">
+      <div><label>Établissement</label><select id="etab"></select></div>
+      <div><label>Année scolaire</label><select id="annee"></select></div>
+    </div></div>
+
+    <div class="card" id="demarrage"></div>
+    <div class="stat" id="s1" style="margin-bottom:12px"></div>
+    <div class="card" id="niveaux"></div>
+    <div class="card" id="fin"></div>
+    <div class="card" id="alertes"></div>
+
+    <h2 style="margin:16px 4px 8px">Modules</h2>
+    <div class="tiles" id="tiles"></div>
+
+    <div class="card" id="carte-sauv" style="margin-top:12px">
+      <h2>💾 Sauvegarde des données</h2>
+      <p id="sauv" style="font-size:.9rem;margin:0 0 4px"></p>
+      <p style="font-size:.8rem;opacity:.7;margin:0 0 8px">Les données sont enregistrées dans la base de données de l'école. Exportez régulièrement une copie : le fichier est confidentiel (il contient le personnel et les paiements).</p>
+      <div class="acts"><button id="bexp">⬇ Exporter les données (JSON)</button></div>
+      <p id="sexp" style="font-size:.85rem;min-height:1.2em;margin:8px 0 0"></p>
+    </div>
+  </div>
 </main>
+
 <script type="module">
-  import { exigerSession, deconnexion } from './kalasa-db.js';
-  document.getElementById('out').onclick = deconnexion;
-  const ctx = await exigerSession();
-  if (ctx) {
-    document.getElementById('nom').textContent = ctx.nom_complet;
-    document.getElementById('role').textContent = 'Rôle : ' + ctx.role + ' • Identifiant : ' + ctx.identifiant;
-    const ul = document.getElementById('etabs');
-    if (!ctx.etablissements.length) ul.innerHTML = '<li>Aucun établissement actif</li>';
-    ctx.etablissements.forEach(e => {
-      const li = document.createElement('li');
-      li.textContent = e.nom + ' (' + e.code + ')';
-      ul.appendChild(li);
-    });
+import { sb, exigerSession, garder, contexte, deconnexion } from './kalasa-db.js';
+
+const C = await exigerSession();
+if (!C) throw new Error('Session requise');
+
+/* ---------- Outils ---------- */
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mess = x => (x && x.message) || String(x);
+const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const lire = async rq => { const { data, error } = await rq; if (error) throw error; return data || []; };
+const tout = async fab => { let out = [], de = 0; for (;;) { const l = await lire(fab(de, de + 999)); out = out.concat(l); if (l.length < 1000) break; de += 1000; } return out; };
+const compter = async rq => { const { count, error } = await rq; if (error) throw error; return count ?? 0; };
+const opt = p => p.then(v => v, () => null);   // une lecture qui échoue renvoie null sans bloquer le reste
+const jour = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('fr-FR');
+const DEV = localStorage.getItem('kalasa_devise') || 'USD';
+const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+const stat = s => { const c = String(s || '').trim().toLowerCase().charAt(0); return c === 'p' ? 'P' : c === 'r' ? 'R' : c === 'a' ? 'A' : 'E'; };
+
+const getCtx = () => { try { return JSON.parse(localStorage.getItem('kalasa_ctx')) || {}; } catch { return {}; } };
+const setCtx = p => { localStorage.setItem('kalasa_ctx', JSON.stringify({ ...getCtx(), ...p })); dispatchEvent(new Event('kalasa:ctx')); };
+
+/* ---------- Droits (matrice de la page Droits, sinon droits par défaut) ---------- */
+const DEF = {
+  directeur: ['etablissement', 'annee', 'classe', 'eleve', 'parent', 'personnel', 'presence', 'note', 'horaire', 'finance', 'message', 'secretariat', 'dashboard-general', 'audit'],
+  secretaire: ['eleve', 'classe', 'parent', 'personnel', 'presence', 'horaire', 'message', 'secretariat'],
+  enseignant: ['presence', 'note', 'horaire'],
+  caissier: ['finance', 'message']
+};
+const droits = Array.isArray(C.droits) ? C.droits : (DEF[C.role] || []);
+const peut = m => C.role === 'admin' || droits.includes('*') || ['index', 'demarrage'].includes(m) || droits.includes(m);
+const ARGENT = ['admin', 'directeur', 'caissier'].includes(C.role);   // argent : admin, directeur, caissier
+
+/* ===== Élèves par niveau (niveaux de etablissement.html / classe.html) ===== */
+const nvORD = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Cycle terminal', 'Humanité', 'Université'];
+const nvNORM = { 'Maternel': 'Maternelle', 'Elémentaire': 'Élémentaire' };
+const nvLEG = { 'Primaire': ['Élémentaire', 'Moyen', 'Terminal'], 'Secondaire': ['Cycle terminal', 'Humanité'] };
+const liste = v => Array.isArray(v) ? v.map(String) : String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+const nvDe = e => {
+  const b = liste(e.niveaux).length ? liste(e.niveaux) : liste(e.type);
+  return nvORD.filter(n => b.includes(n) || b.some(x => (nvLEG[x] || []).includes(n)));
+};
+const nvC = c => nvNORM[c.type] || c.type || (c.option ? 'Humanité' : 'Non défini');
+let SEXE = true;
+function nvPar(e, cls, els) {
+  const nc = {}; cls.forEach(c => nc[c.id] = nvC(c));
+  const noms = [...new Set([...nvDe(e || {}), ...cls.map(nvC)])]
+    .sort((a, b) => { const i = nvORD.indexOf(a), j = nvORD.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
+  const res = noms.map(n => {
+    const k = cls.filter(c => nvC(c) === n), le = els.filter(x => nc[x.classe_id] === n);
+    return { n, cls: k.length, els: le.length, g: le.filter(x => x.sexe === 'M').length,
+      det: k.map(c => ({ nom: c.nom + (c.option ? ' · ' + c.option : ''), n: le.filter(x => x.classe_id === c.id).length, max: c.max })) };
+  });
+  const orph = els.filter(x => !nc[x.classe_id]);
+  if (orph.length) res.push({ n: 'Classe introuvable', cls: 0, els: orph.length, g: orph.filter(x => x.sexe === 'M').length, det: [], o: 1 });
+  return res;
+}
+const gf = (g, t) => SEXE ? ` <small>(${g} G · ${t - g} F)</small>` : '';
+const nvBloc = N => N.map(v => `<details class="niv"><summary><span>${esc(v.n)} <small>${v.cls} classe(s)</small></span>
+  <b>${v.els}${gf(v.g, v.els)}</b></summary>
+  ${v.o ? '' : v.det.length ? v.det.map(c => `<div class="sub"><span>${esc(c.nom)}</span><span>${c.n}${c.max ? ' / ' + c.max : ''}</span></div>`).join('') : '<div class="sub"><span>Aucune classe pour ce niveau</span></div>'}</details>`).join('');
+
+/* ---------- État ---------- */
+const ETABS = C.etablissements || [];
+let ETAB = C.etabId, ANNEES = [], ANNEE = '', seq = 0;
+
+async function chargerEleves(et, an) {
+  const cols = SEXE ? 'id, classe_id, sexe' : 'id, classe_id';
+  try {
+    return await tout((a, b) => sb.from('inscriptions').select(cols).eq('etablissement_id', et).eq('annee_id', an).order('id').range(a, b));
+  } catch (x) {
+    if (SEXE && /sexe/i.test(mess(x))) { SEXE = false; return chargerEleves(et, an); }
+    throw x;
   }
+}
+
+/* ---------- Chargement et rendu ---------- */
+async function charger() {
+  const moi = ++seq;
+  erreur('');
+  try {
+    ANNEES = await lire(sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }));
+    const ctx = getCtx();
+    ANNEE = ctx.annee && ANNEES.some(a => a.id === ctx.annee) ? ctx.annee : ((ANNEES.find(a => a.active) || ANNEES[0] || {}).id || '');
+    $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}" ${e.id === ETAB ? 'selected' : ''}>${esc(e.nom)}</option>`).join('');
+    $('annee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}" ${a.id === ANNEE ? 'selected' : ''}>${esc(a.lib)}</option>`).join('');
+    const nomE = (ETABS.find(e => e.id === ETAB) || {}).nom || '', nomA = (ANNEES.find(a => a.id === ANNEE) || {}).lib || '';
+    $('sub').textContent = ETABS.length ? '· ' + nomE + ' · ' + nomA : '';
+
+    if (!ETAB || !ANNEE) { rendu({ vide: true }); return; }
+
+    const besoinFrais = ARGENT || peut('finance');
+    const [etr, cls0, els, pers, parN, mats, horN, pres, frais, paie] = await Promise.all([
+      opt(lire(sb.from('etablissements').select('*').eq('id', ETAB))),
+      opt(lire(sb.from('classes').select('*').eq('etablissement_id', ETAB))),
+      opt(chargerEleves(ETAB, ANNEE)),
+      opt(tout((a, b) => sb.from('personnel').select('id, fonction').eq('etablissement_id', ETAB).order('id').range(a, b))),
+      opt(compter(sb.from('parents').select('id', { count: 'exact', head: true }).eq('etablissement_id', ETAB))),
+      opt(lire(sb.from('matieres').select('id, classe_id').eq('etablissement_id', ETAB))),
+      opt(compter(sb.from('horaires').select('id', { count: 'exact', head: true }).eq('etablissement_id', ETAB).eq('annee_id', ANNEE))),
+      opt(tout((a, b) => sb.from('presences').select('classe_id, statut').eq('etablissement_id', ETAB).eq('date_appel', jour()).order('id').range(a, b))),
+      besoinFrais ? opt(lire(sb.from('frais').select('classe_id, montant').eq('etablissement_id', ETAB).eq('annee_id', ANNEE))) : Promise.resolve([]),
+      ARGENT ? opt(tout((a, b) => sb.from('paiements').select('inscription_id, montant').eq('etablissement_id', ETAB).eq('annee_id', ANNEE).order('id').range(a, b))) : Promise.resolve([])
+    ]);
+    if (moi !== seq) return;
+    rendu({ etr: (etr || [])[0] || {}, cls0, els, pers, parN, mats, horN, pres, frais, paie });
+  } catch (x) {
+    if (moi !== seq) return;
+    erreur('Lecture impossible : ' + esc(mess(x)));
+  }
+}
+
+function rendu(d) {
+  const A = ANNEES.length;
+  if (d.vide) {
+    $('demarrage').innerHTML = '<h2>🚀 Pour bien démarrer</h2>' +
+      [[ETABS.length, 'etablissement', 'Créer l\'établissement'], [A, 'annee', 'Créer l\'année scolaire']].filter(s => peut(s[1]))
+        .map((s, i) => `<a class="step ${s[0] ? 'ok' : 'next'}" href="${s[1]}.html"><i>${s[0] ? '✔' : i + 1}</i>${s[2]}</a>`).join('');
+    ['s1', 'niveaux', 'fin', 'alertes', 'tiles'].forEach(i => { $(i).innerHTML = ''; });
+    $('niveaux').style.display = 'none'; $('fin').style.display = 'none'; $('alertes').style.display = 'none';
+    return;
+  }
+  $('alertes').style.display = '';
+  const manque = [];
+  const lib = (v, nom) => { if (v === null) manque.push(nom); return v; };
+  const CL = (lib(d.cls0, 'classes') || []).map(c => ({ ...c, option: c.option || c.option_faculte || c.faculte || '', type: c.type || c.niveau || '', max: c.max ?? c.capacite ?? c.effectif_max ?? null }));
+  const cls = CL.filter(c => c.annee_id == null || c.annee_id === ANNEE);
+  const els = lib(d.els, 'élèves') || [];
+  const pers = lib(d.pers, 'personnel') || [];
+  const parN = lib(d.parN, 'parents') ?? 0;
+  const idsC = new Set(cls.map(c => c.id));
+  const MATc = (lib(d.mats, 'matières') || []).filter(m => idsC.has(m.classe_id));
+  const horN = lib(d.horN, 'horaires') ?? 0;
+  const pres = lib(d.pres, 'présences') || [];
+  const frais = d.frais || [], paie = d.paie || [];
+  const g = els.filter(e => e.sexe === 'M').length;
+
+  /* Démarrage */
+  const steps0 = [[ETABS.length, 'etablissement', 'Créer l\'établissement'], [ANNEES.length, 'annee', 'Créer l\'année scolaire'],
+    [cls.length, 'classe', 'Créer les classes'], [els.length, 'eleve', 'Inscrire les élèves'],
+    [pers.length, 'personnel', 'Enregistrer le personnel'], [parN, 'parent', 'Enregistrer les parents'],
+    [MATc.length, 'note', 'Définir les matières'], [frais.length, 'finance', 'Définir les frais scolaires']];
+  const steps = steps0.filter(s => peut(s[1]));
+  const next = steps.findIndex(s => !s[0]);
+  $('demarrage').innerHTML = next < 0 ? '<b class="bon">✔ Configuration terminée</b> — KALASA est prêt à l\'emploi.' :
+    '<h2>🚀 Pour bien démarrer</h2>' + steps.map((s, i) => `<a class="step ${s[0] ? 'ok' : i === next ? 'next' : ''}" href="${s[1]}.html"><i>${s[0] ? '✔' : i + 1}</i>${s[2]}</a>`).join('');
+
+  /* Présences du jour (uniquement les classes de l'année choisie) */
+  let mP = 0, mA = 0, mR = 0, mE = 0; const faits = new Set();
+  pres.filter(p => idsC.has(p.classe_id)).forEach(p => {
+    faits.add(p.classe_id);
+    const s = stat(p.statut); s === 'P' ? mP++ : s === 'A' ? mA++ : s === 'R' ? mR++ : mE++;
+  });
+  const tot = mP + mA + mR + mE, taux = tot ? Math.round((mP + mR) / tot * 100) : null;
+  $('s1').innerHTML = `
+    <div><b>${els.length}</b>Élèves<br>${SEXE ? `<small>${g} G · ${els.length - g} F</small>` : ''}</div>
+    <div><b>${cls.length}</b>Classes</div>
+    <div><b>${pers.length}</b>Personnel<br><small>${pers.filter(p => /ensei|prof/i.test(p.fonction || '')).length} enseignant(s)</small></div>
+    <div><b>${parN}</b>Parents</div>
+    <div class="${taux === null ? '' : taux >= 85 ? 'bon' : taux >= 70 ? 'moy' : 'bas'}"><b>${taux === null ? '—' : taux + '%'}</b>Présence du jour<br><small>${faits.size}/${cls.length} appel(s)</small></div>
+    <div class="${mA ? 'bas' : ''}"><b>${mA}</b>Absent(s) aujourd'hui</div>`;
+
+  /* Élèves par niveau */
+  const NVX = nvPar(d.etr || {}, cls, els);
+  $('niveaux').style.display = NVX.length ? '' : 'none';
+  $('niveaux').innerHTML = NVX.length ? '<h2>🎓 Élèves par niveau</h2>' + nvBloc(NVX) : '';
+
+  /* Finances : frais communs (classe_id vide) + frais propres à la classe */
+  const communs = frais.filter(f => !f.classe_id).reduce((s, f) => s + (+f.montant || 0), 0);
+  const parClasse = {}; frais.filter(f => f.classe_id).forEach(f => { parClasse[f.classe_id] = (parClasse[f.classe_id] || 0) + (+f.montant || 0); });
+  const paye = {}; paie.forEach(p => { paye[p.inscription_id] = (paye[p.inscription_id] || 0) + (+p.montant || 0); });
+  let D = 0, Pp = 0, impayes = 0;
+  els.forEach(e => { const f = communs + (parClasse[e.classe_id] || 0), p = paye[e.id] || 0; D += f; Pp += p; if (f - p > 0) impayes++; });
+  $('fin').style.display = ARGENT ? '' : 'none';
+  $('fin').innerHTML = !ARGENT ? '' : D ? `<h2>💰 Frais scolaires</h2><div class="stat">
+    <div><b style="font-size:1rem">${fmt(D)}</b>Attendu</div>
+    <div class="bon"><b style="font-size:1rem">${fmt(Pp)}</b>Encaissé</div>
+    <div class="bas"><b style="font-size:1rem">${fmt(Math.max(0, D - Pp))}</b>Reste</div></div>
+    <div class="bar"><i style="width:${Math.min(100, Math.round(Pp / D * 100))}%"></i></div>` :
+    '<h2>💰 Frais scolaires</h2><a href="finance.html" style="color:var(--m)">Aucun frais défini pour cette année — en créer →</a>';
+
+  /* Alertes */
+  const al = [[mA > 0, 'message.html', '❌ ' + mA + ' élève(s) absent(s) aujourd\'hui', 'Prévenir'],
+    [ARGENT && impayes > 0, 'message.html', '💰 ' + impayes + ' élève(s) avec un solde impayé', 'Relancer'],
+    [els.length > 0 && !faits.size, 'presence.html', '✅ L\'appel du jour n\'est pas encore fait', 'Faire l\'appel'],
+    [manque.length > 0, '', '⚠ Données non lues : ' + manque.join(', '), '']].filter(a => a[0] && (!a[1] || peut(a[1].replace('.html', ''))));
+  $('alertes').innerHTML = '<h2>🔔 Alertes</h2>' + (al.length ? al.map(a => a[1]
+    ? `<a class="al" href="${a[1]}"><span>${a[2]}</span><span style="color:var(--m)">${a[3]} ›</span></a>`
+    : `<div class="al"><span>${esc(a[2])}</span></div>`).join('') : '<span class="bon">Rien à signaler 🎉</span>');
+
+  /* Tuiles */
+  const T = [['etablissement', '🏫', 'Établissements', ETABS.length + ' enregistré(s)'], ['annee', '📅', 'Années scolaires', ANNEES.length + ' enregistrée(s)'],
+    ['classe', '👥', 'Classes', cls.length + ' cette année'], ['eleve', '🧒', 'Élèves', els.length + ' inscrit(s)'],
+    ['parent', '👨‍👩‍👧', 'Parents', parN + ' enregistré(s)'], ['personnel', '🧑‍🏫', 'Personnel', pers.length + ' membre(s)'],
+    ['presence', '✅', 'Présences', faits.size + ' appel(s) aujourd\'hui'], ['note', '📝', 'Notes et bulletins', MATc.length + ' matière(s)'],
+    ['horaire', '🕐', 'Emploi du temps', horN + ' cours'], ['finance', '💰', 'Frais et paiements', ARGENT ? paie.length + ' paiement(s)' : 'Frais scolaires'],
+    ['message', '💬', 'Messages', 'Alertes et envois'], ['secretariat', '🗂', 'Secrétariat', 'Inscriptions et comptes'],
+    ['dashboard-general', '📊', 'Tableau de bord général', 'Plusieurs établissements']]
+    .concat([['utilisateurs', '🔐', 'Utilisateurs', 'Comptes et rôles']]).filter(t => peut(t[0]));
+  $('tiles').innerHTML = T.map(([f, i, t, s]) => `<a class="tile" href="${f}.html"><span>${i}</span><b>${t}</b><small>${s}</small></a>`).join('');
+  majSauv();
+}
+
+/* ---------- Export des données (administrateur) ---------- */
+function majSauv() {
+  if (!$('sauv')) return;
+  const d = localStorage.getItem('kalasa_derniere_sauvegarde');
+  const j = d ? Math.floor((Date.now() - new Date(d + 'T12:00:00')) / 864e5) : null;
+  $('sauv').innerHTML = d ? (j > 7 ? '<span class="moy">⚠ Dernier export : ' + fmtD(d) + ' (il y a ' + j + ' jours)</span>' : 'Dernier export : ' + fmtD(d))
+    : '<span class="moy">Aucun export enregistré sur cet appareil.</span>';
+}
+async function exporter() {
+  if (C.role !== 'admin') return alert('Réservé à l\'administrateur.');
+  const b = $('bexp'), s = $('sexp'); b.disabled = true; s.textContent = '⏳ Préparation…';
+  const o = { application: 'KALASA', date: new Date().toISOString(), etablissement: ETAB, annees: ANNEES, erreurs: {} };
+  const tables = [['classes', '*'], ['inscriptions', '*'], ['parents', '*, parent_eleves(inscription_id)'], ['personnel', '*'],
+    ['matieres', '*'], ['horaires', '*'], ['frais', '*'], ['paiements', '*'], ['notes', '*']];
+  for (const [t, cols] of tables) {
+    s.textContent = '⏳ ' + t + '…';
+    try { o[t] = await tout((a, z) => sb.from(t).select(cols).eq('etablissement_id', ETAB).order('id').range(a, z)); }
+    catch (x) { o.erreurs[t] = mess(x); }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(o)], { type: 'application/json' }));
+  a.download = 'kalasa_export_' + jour() + '.json'; a.click();
+  localStorage.setItem('kalasa_derniere_sauvegarde', jour()); majSauv();
+  const nbErr = Object.keys(o.erreurs).length;
+  s.innerHTML = nbErr ? '<span class="moy">Export terminé, mais ' + nbErr + ' table(s) non lue(s) : ' + esc(Object.keys(o.erreurs).join(', ')) + '</span>' : '<span class="bon">✔ Export terminé.</span>';
+  b.disabled = false;
+}
+
+/* ---------- Démarrage ---------- */
+if (C.role === 'eleve') {
+  /* Un élève ne voit pas les statistiques de l'école */
+  $('staff').innerHTML = `<div class="card"><h2>👋 Bienvenue ${esc(C.nom_complet)}</h2>
+    <p>Votre espace élève sera bientôt disponible.</p><button class="sec" id="out">Se déconnecter</button></div>`;
+  $('out').onclick = deconnexion;
+} else {
+  if (C.role !== 'admin') { const c = $('carte-sauv'); if (c) c.remove(); }
+  $('etab').addEventListener('change', e => { ETAB = e.target.value; garder({ ...(contexte() || {}), etabId: ETAB }); charger(); });
+  $('annee').addEventListener('change', e => setCtx({ annee: e.target.value }));
+  const bx = $('bexp'); if (bx) bx.addEventListener('click', exporter);
+  addEventListener('kalasa:ctx', charger);
+  await charger();
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
+<script type="module" src="kalasa-ui.js"></script>
 </body></html>
