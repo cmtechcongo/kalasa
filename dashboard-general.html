@@ -5,16 +5,18 @@
 <title>KALASA — Tableau de bord général</title>
 <link rel="stylesheet" href="kalasa.css">
 <style>
-.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stat{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;text-align:center}
 .stat>div{background:#8882;border-radius:12px;padding:12px 4px;font-size:.75rem}
 .stat b{display:block;font-size:1.35rem}.stat small{opacity:.7}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .chips label{display:flex;align-items:center;gap:6px;margin:0;padding:8px 12px;border-radius:99px;background:#8883;font-size:.9rem;opacity:1;cursor:pointer}
 .chips label:has(input:checked){background:var(--m);color:#fff}
 .chips input{width:auto;margin:0}
+.bar{height:8px;background:#8883;border-radius:4px;margin-top:10px}.bar i{display:block;height:8px;border-radius:4px;background:#16a34a}
 .ent h2{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .ent small{opacity:.7;font-weight:400}
 .ln{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #8883;font-size:.92rem}.ln:last-child{border:0}
+.bon{color:#16a34a}.moy{color:#f59e0b}.bas{color:#dc2626}
 details.niv{border-bottom:1px solid #8883}
 details.niv:last-of-type{border:0}
 details.niv summary{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;cursor:pointer;list-style:none;font-size:.92rem}
@@ -53,6 +55,15 @@ const mess = x => (x && x.message) || String(x);
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
 const lire = async rq => { const { data, error } = await rq; if (error) throw error; return data || []; };
 const tout = async fab => { let out = [], de = 0; for (;;) { const l = await lire(fab(de, de + 999)); out = out.concat(l); if (l.length < 1000) break; de += 1000; } return out; };
+/* Une partie facultative qui échoue (droits, table) ne bloque pas le reste du tableau de bord */
+const facultatif = p => p.then(v => ({ ok: true, v }), x => ({ ok: false, x }));
+
+const DEV = localStorage.getItem('kalasa_devise') || 'USD';
+const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+const jour = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const classe = t => t === null ? '' : t >= 85 ? 'bon' : t >= 70 ? 'moy' : 'bas';
+/* Statut de présence : P/R/présent/retard = présent · A/absent = absent · autre (excusé…) = compté seulement dans le total */
+const stat = s => { const c = String(s || '').trim().toLowerCase().charAt(0); return c === 'p' || c === 'r' ? 'P' : c === 'a' ? 'A' : 'X'; };
 
 /* Contexte partagé avec les autres pages (année choisie, établissements cochés) */
 const getCtx = () => { try { return JSON.parse(localStorage.getItem('kalasa_ctx')) || {}; } catch { return {}; } };
@@ -97,7 +108,7 @@ function selecteurs(annees, an, multi) {
 $('annee').addEventListener('change', e => setCtx({ annee: e.target.value }));
 $('chips').addEventListener('change', () => setCtx({ multi: [...document.querySelectorAll('#chips input:checked')].map(i => i.value) }));
 
-/* ---------- Chargement des élèves (avec ou sans colonne sexe) ---------- */
+/* ---------- Chargement des données ---------- */
 async function chargerEleves(ids, an) {
   const cols = SEXE ? 'id, classe_id, etablissement_id, sexe' : 'id, classe_id, etablissement_id';
   try {
@@ -107,6 +118,17 @@ async function chargerEleves(ids, an) {
     throw x;
   }
 }
+const chargerPresences = ids => tout((a, b) => sb.from('presences').select('classe_id, etablissement_id, statut')
+  .eq('date_appel', jour()).in('etablissement_id', ids).order('id').range(a, b));
+const chargerFinance = async (ids, an) => {
+  const [frais, paie] = await Promise.all([
+    lire(sb.from('frais').select('etablissement_id, classe_id, montant').eq('annee_id', an).in('etablissement_id', ids)),
+    tout((a, b) => sb.from('paiements').select('inscription_id, montant').eq('annee_id', an).in('etablissement_id', ids).order('id').range(a, b))
+  ]);
+  const paye = {};
+  paie.forEach(p => { paye[p.inscription_id] = (paye[p.inscription_id] || 0) + (+p.montant || 0); });
+  return { frais, paye };
+};
 
 /* ---------- Rendu ---------- */
 let seq = 0;
@@ -125,43 +147,87 @@ async function charger() {
     if (!an) { $('out').innerHTML = '<div class="card">Créez d\'abord <a href="annee.html">une année scolaire</a>.</div>'; return; }
     if (!multi.length) { $('out').innerHTML = '<div class="card">Cochez au moins un établissement.</div>'; return; }
 
-    const [etr, cls0, pers, els] = await Promise.all([
+    const [etr, cls0, pers, els, pres, fin] = await Promise.all([
       lire(sb.from('etablissements').select('*').in('id', multi)),
       lire(sb.from('classes').select('*').in('etablissement_id', multi)),
       tout((a, b) => sb.from('personnel').select('etablissement_id, fonction').in('etablissement_id', multi).order('id').range(a, b)),
-      chargerEleves(multi, an)
+      chargerEleves(multi, an),
+      facultatif(chargerPresences(multi)),
+      facultatif(chargerFinance(multi, an))
     ]);
     if (moi !== seq) return;   // une sélection plus récente est en cours
+
+    const PRES = pres.ok ? pres.v : null, FIN = fin.ok ? fin.v : null;
+    const notes = [];
+    if (!pres.ok) notes.push('Présence du jour indisponible : ' + esc(mess(pres.x)));
+    if (!fin.ok) notes.push('Finances indisponibles : ' + esc(mess(fin.x)));
 
     const CL = cls0.map(c => ({ ...c, option: c.option || c.option_faculte || c.faculte || '', type: c.type || c.niveau || '', max: c.max ?? c.capacite ?? c.effectif_max ?? null }));
     const nA = (annees.find(a => a.id === an) || {}).lib || '';
 
+    /* Un calcul par établissement, uniquement sur l'année choisie */
     const R = multi.map(id => {
       const e = etr.find(x => x.id === id) || ETABS_OK.find(x => x.id === id);
       if (!e) return null;
       const cls = CL.filter(x => x.etablissement_id === id && (x.annee_id == null || x.annee_id === an));
       const le = els.filter(x => x.etablissement_id === id);
       const lp = pers.filter(p => p.etablissement_id === id);
+
+      /* Présence du jour */
+      let pr = 0, ab = 0, tot = 0;
+      const appels = new Set(), clsIds = new Set(cls.map(c => c.id));
+      if (PRES) PRES.filter(p => p.etablissement_id === id && clsIds.has(p.classe_id)).forEach(p => {
+        appels.add(p.classe_id); tot++;
+        const s = stat(p.statut); if (s === 'P') pr++; else if (s === 'A') ab++;
+      });
+
+      /* Finances : frais d'une classe = frais communs (classe_id vide) + frais propres à la classe */
+      let D = 0, Pp = 0, imp = 0;
+      if (FIN) {
+        const fr = FIN.frais.filter(f => f.etablissement_id === id);
+        const communs = fr.filter(f => !f.classe_id).reduce((s, f) => s + (+f.montant || 0), 0);
+        const parClasse = {};
+        fr.filter(f => f.classe_id).forEach(f => { parClasse[f.classe_id] = (parClasse[f.classe_id] || 0) + (+f.montant || 0); });
+        le.forEach(x => {
+          const d = communs + (parClasse[x.classe_id] || 0), p = FIN.paye[x.id] || 0;
+          D += d; Pp += p; if (d - p > 0) imp++;
+        });
+      }
+
       return { nom: e.nom, niv: nvPar(e, cls, le), cls: cls.length, els: le.length, g: le.filter(x => x.sexe === 'M').length,
-        pers: lp.length, ens: lp.filter(p => /ensei|prof/i.test(p.fonction || '')).length };
+        pers: lp.length, ens: lp.filter(p => /ensei|prof/i.test(p.fonction || '')).length,
+        pr, ab, tot, appels: appels.size, taux: tot ? Math.round(pr / tot * 100) : null, D, Pp, imp };
     }).filter(Boolean);
 
-    const S = R.reduce((a, r) => ({ cls: a.cls + r.cls, els: a.els + r.els, pers: a.pers + r.pers, ens: a.ens + r.ens }), { cls: 0, els: 0, pers: 0, ens: 0 });
+    const S = R.reduce((a, r) => ({ cls: a.cls + r.cls, els: a.els + r.els, pers: a.pers + r.pers, pr: a.pr + r.pr, tot: a.tot + r.tot, ab: a.ab + r.ab, D: a.D + r.D, Pp: a.Pp + r.Pp, imp: a.imp + r.imp }),
+      { cls: 0, els: 0, pers: 0, pr: 0, tot: 0, ab: 0, D: 0, Pp: 0, imp: 0 });
+    const taux = S.tot ? Math.round(S.pr / S.tot * 100) : null, pct = S.D ? Math.min(100, Math.round(S.Pp / S.D * 100)) : 0;
 
     $('out').innerHTML = `
     <div class="card"><h2>📊 Ensemble · ${esc(nA)} <small style="font-weight:400;opacity:.7">${R.length} établissement(s)</small></h2>
       <div class="stat">
         <div><b>${S.els}</b>Élèves</div><div><b>${S.cls}</b>Classes</div>
-        <div><b>${S.pers}</b>Personnel<br><small>${S.ens} enseignant(s)</small></div>
+        <div><b>${S.pers}</b>Personnel</div>
+        <div class="${classe(taux)}"><b>${taux === null ? '—' : taux + '%'}</b>Présence du jour<br><small>${S.ab} absent(s)</small></div>
       </div>
+      ${S.D ? `<div class="stat" style="margin-top:8px;grid-template-columns:repeat(3,1fr)">
+        <div><b style="font-size:.95rem">${fmt(S.D)}</b>Attendu</div>
+        <div class="bon"><b style="font-size:.95rem">${fmt(S.Pp)}</b>Encaissé</div>
+        <div class="bas"><b style="font-size:.95rem">${fmt(Math.max(0, S.D - S.Pp))}</b>Reste</div></div>
+        <div class="bar"><i style="width:${pct}%"></i></div>` : ''}
     </div>
     ${R.map(r => `<div class="card ent"><h2>🏫 ${esc(r.nom)} <small>${esc(nA)}</small></h2>
       <div class="ln"><span>Élèves</span><b>${r.els}${gf(r.g, r.els)}</b></div>
       <div class="ln"><span>Classes</span><b>${r.cls}</b></div>
       ${r.niv.length ? `<h3 class="ti">📚 Élèves par niveau</h3>${nvBloc(r.niv)}` : ''}
       <div class="ln"><span>Personnel</span><b>${r.pers} <small>(${r.ens} enseignant(s))</small></b></div>
+      <div class="ln"><span>Présence du jour</span><b class="${classe(r.taux)}">${r.taux === null ? '—' : r.taux + '%'} <small>${r.appels}/${r.cls} appel(s)</small></b></div>
+      <div class="ln"><span>Frais encaissés</span><b>${r.D ? fmt(r.Pp) + ' / ' + fmt(r.D) : '—'}</b></div>
+      ${r.imp ? `<div class="ln"><span>Soldes impayés</span><b class="bas">${r.imp} élève(s)</b></div>` : ''}
+      ${r.D ? `<div class="bar"><i style="width:${Math.min(100, Math.round(r.Pp / r.D * 100))}%"></i></div>` : ''}
     </div>`).join('')}
-    <p style="text-align:center;opacity:.6;font-size:.8rem">La présence du jour et les finances (attendu, encaissé, impayés) s'afficheront ici après la migration des pages Présences et Finance.</p>`;
+    ${notes.length ? `<p class="bas" style="text-align:center;font-size:.8rem">${notes.join('<br>')}</p>` : ''}
+    <p style="text-align:center;opacity:.6;font-size:.8rem">Montants additionnés dans la devise unique ${esc(DEV)} (réglage « Frais »).</p>`;
   } catch (x) {
     if (moi !== seq) return;
     $('out').innerHTML = '';
