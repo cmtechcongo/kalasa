@@ -43,7 +43,7 @@
 </div>
 
 <section id="pA">
-  <div class="card ro" id="ro">👁 <b>Lecture seule.</b> Seuls les enseignants de la maternelle au cycle terminal peuvent faire l'appel. Pour cette classe, vous pouvez consulter les présences mais pas les modifier.</div>
+  <div class="card ro" id="ro">👁 <b>Lecture seule.</b> Seul l'enseignant titulaire d'une classe de la maternelle au degré terminal peut faire l'appel. Pour cette classe, vous pouvez consulter les présences mais pas les modifier.</div>
   <div class="card">
     <label>Date de l'appel</label><input id="date" type="date">
     <div class="acts"><button class="sec" id="btous">✔ Marquer les non-marqués présents</button></div>
@@ -93,10 +93,12 @@ const cid = () => $('classe').value;
 const txtSel = id => $(id)?.selectedOptions?.[0]?.text || '';
 const etabCourant = () => ETABS.find(x => x.id === $('etab').value) || { nom: '', adresse: '' };
 
-/* L'enseignant ne peut faire l'appel que de la maternelle au cycle terminal (pas Humanité ni Université) */
+/* L'enseignant ne fait l'appel que pour une classe de la maternelle au degré terminal
+   (un seul enseignant par classe). La base de données applique la même règle :
+   il ne peut écrire que pour sa propre classe. Cycle terminal, Humanité, Université : lecture seule. */
 const nivOk = type => {
-  const t = String(type || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return !(t.startsWith('human') || t.startsWith('univ'));
+  const t = String(type || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return ['maternelle', 'maternel', 'elementaire', 'moyen', 'terminal', 'primaire'].includes(t);
 };
 const peutAppel = () => {
   if (!ENS) return true;
@@ -145,6 +147,7 @@ async function init() {
   }
   if (!CLASSES.length) {
     erreur(SURV ? 'Aucune classe ne vous est assignée. Contactez l\'administrateur.'
+      : ENS ? 'Aucune classe ne vous est assignée. Contactez la direction.'
       : 'Créez d\'abord <a href="classe.html">des classes</a> et <a href="eleve.html">des élèves</a>.');
   }
 
