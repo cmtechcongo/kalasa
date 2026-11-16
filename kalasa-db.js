@@ -13,7 +13,9 @@ export const ACCUEIL = {
   secretaire: 'index.html',
   enseignant: 'index.html',
   caissier: 'index.html',
-  eleve: 'espace-eleve.html'
+  eleve: 'espace-eleve.html',
+  surveillant: 'presence.html'
+
 };
 
 const CLE = 'kalasa_session';
