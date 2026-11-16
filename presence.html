@@ -63,7 +63,8 @@
 <script type="module">
 import { sb, exigerSession } from './kalasa-db.js';
 
-const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant']);
+const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant', 'surveillant']);
+const SURV = C.role === 'surveillant';
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -101,7 +102,20 @@ async function init() {
   const err = re.error || ra.error || rc.error;
   if (err) return erreur('Lecture impossible : ' + esc(err.message));
   ETABS = re.data || []; ANNEES = ra.data || []; CLASSES = rc.data || [];
-  if (!CLASSES.length) erreur('Créez d\'abord <a href="classe.html">des classes</a> et <a href="eleve.html">des élèves</a>.');
+
+  /* Surveillant : uniquement les classes qui lui sont assignées */
+  if (SURV) {
+    const rm = await sb.from('surveillant_classes').select('classe_id').eq('utilisateur_id', C.id);
+    if (rm.error) return erreur('Lecture de vos classes impossible : ' + esc(rm.error.message));
+    const mes = new Set((rm.data || []).map(x => x.classe_id));
+    CLASSES = CLASSES.filter(c => mes.has(c.id));
+    ETABS = ETABS.filter(e => CLASSES.some(c => c.etablissement_id === e.id));
+    ANNEES = ANNEES.filter(a => CLASSES.some(c => c.annee_id === a.id));
+  }
+  if (!CLASSES.length) {
+    erreur(SURV ? 'Aucune classe ne vous est assignée. Contactez l\'administrateur.'
+      : 'Créez d\'abord <a href="classe.html">des classes</a> et <a href="eleve.html">des élèves</a>.');
+  }
 
   $('etab').innerHTML = ETABS.map(e => `<option value="${esc(e.id)}">${esc(e.nom)}</option>`).join('');
   if (ETABS.some(e => e.id === C.etabId)) $('etab').value = C.etabId;
@@ -115,6 +129,7 @@ async function init() {
 /* Téléphones des parents (visibles seulement pour les rôles qui ont accès aux parents) */
 async function chargerParents() {
   TEL = {};
+  if (SURV) return;
   const e = $('etab').value; if (!e) return;
   const r = await sb.from('parents').select('tel, parent_eleves(inscription_id)').eq('etablissement_id', e);
   if (r.error) return;
@@ -136,7 +151,7 @@ async function chargerEleves() {
     const { data, error } = await sb.from('inscriptions')
       .select('id, matricule, nom, postnom, prenom, photo').eq('classe_id', cid()).order('nom');
     if (error) erreur('Lecture des élèves impossible : ' + esc(error.message));
-    else { erreur(''); ELEVES = data || []; }
+    else { if (!(SURV && !CLASSES.length)) erreur(''); ELEVES = data || []; }
   }
   await rendu();
 }
