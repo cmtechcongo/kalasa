@@ -14,7 +14,8 @@ const ACCES = {
   secretaire: ['index', 'classe', 'eleve', 'parent', 'presence', 'message', 'secretariat'],
   enseignant: ['index', 'classe', 'eleve', 'presence', 'note', 'horaire', 'message'],
   caissier: ['index', 'eleve', 'finance', 'message'],
-  eleve: ['index']
+  eleve: ['index'],
+  surveillant: ['presence']
 };
 
 const C = await exigerSession();
