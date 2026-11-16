@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Mon espace</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+main{max-width:560px}
+.hbtn{margin-left:auto;flex:none;min-width:44px;min-height:44px;padding:0;font-size:1.3rem;line-height:1;background:#fff3;color:#fff;border-radius:8px}
+.ln{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #8883;font-size:.92rem}
+.ln:last-child{border:0}small{opacity:.7}.v{opacity:.7}
+.j{margin:8px 0 2px}.j>b{color:var(--m)}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;font-size:.75rem}
+.stat div{background:#8882;border-radius:10px;padding:10px 2px}.stat b{display:block;font-size:1.2rem}
+select{margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:7px 4px;text-align:left;border-bottom:1px solid #8883}
+th:not(:first-child),td:not(:first-child){text-align:right}
+.bar{height:8px;background:#8883;border-radius:4px;margin-top:8px}.bar i{display:block;height:8px;border-radius:4px;background:#16a34a}
+.btn{width:100%;padding:14px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-size:1rem;font-weight:600;cursor:pointer;margin-top:10px}
+.btn[disabled]{background:#8885;cursor:not-allowed}
+.blo{background:#fef3c7;border-left:4px solid #f59e0b;color:#78350f;padding:12px;border-radius:8px;font-size:.88rem;margin-top:8px}
+@media(prefers-color-scheme:dark){.blo{background:#422006;color:#fde68a}}
+.err{background:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;font-size:.88rem;margin-bottom:10px}
+</style></head><body>
+<header>🎓 KALASA · Mon espace <button type="button" class="hbtn" id="deco" title="Déconnexion">🚪</button></header>
+<main id="app"><div class="card"><p class="v">Chargement…</p></div></main>
+
+<script src="bulletin-modele.js"></script>
+<script type="module">
+import { sb, exigerSession, deconnexion } from './kalasa-db.js';
+
+const app = document.getElementById('app');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const erreur = (msg, e) => {
+  app.innerHTML = '<div class="card"><div class="err"><b>⚠ Erreur :</b> ' + esc(msg) + (e && e.message ? '<br><small>' + esc(e.message) + '</small>' : '') + '</div></div>';
+  if (e) console.error(e);
+};
+document.getElementById('deco').addEventListener('click', () => deconnexion());
+
+try {
+  await exigerSession(['eleve']);
+
+  /* ===== Chargement des données de l'élève (la base ne renvoie QUE ses propres lignes) ===== */
+  const ri = await sb.rpc('kalasa_mon_inscription');
+  if (ri.error) throw ri.error;
+  if (!ri.data) {
+    app.innerHTML = '<div class="card">Ce compte n\'est lié à aucun élève. Demandez à l\'administrateur de le configurer.</div>';
+    throw 'stop';
+  }
+  const rEl = await sb.from('inscriptions').select('*').eq('id', ri.data).single();
+  if (rEl.error) throw rEl.error;
+  const el = rEl.data;
+
+  const [rc, re, ra, rh, rp, rm, rn, rf, rpa] = await Promise.all([
+    sb.from('classes').select('*').eq('id', el.classe_id).single(),
+    sb.from('etablissements').select('*').eq('id', el.etablissement_id).single(),
+    sb.from('annees_scolaires').select('lib').eq('id', el.annee_id).single(),
+    sb.rpc('kalasa_mon_emploi'),
+    sb.from('presences').select('statut, date_appel').eq('inscription_id', el.id),
+    sb.from('matieres').select('id, nom, coef, note_max').eq('classe_id', el.classe_id),
+    sb.from('notes').select('matiere_id, periode, valeur').eq('inscription_id', el.id),
+    sb.from('frais').select('montant, classe_id').eq('etablissement_id', el.etablissement_id).eq('annee_id', el.annee_id),
+    sb.from('paiements').select('montant, date_paiement').eq('inscription_id', el.id).order('date_paiement', { ascending: false })
+  ]);
+  const err = [rc, re, ra, rh, rp, rm, rn, rf, rpa].find(r => r.error);
+  if (err) throw err.error;
+
+  const DEV = localStorage.getItem('kalasa_devise') || 'USD';
+  const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+  const fmtD = d => d ? String(d).split('-').reverse().join('/') : '';
+  const JL = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const PER = [['P1', '1ère période'], ['P2', '2ème période'], ['EX1', 'Examen 1er semestre'],
+               ['P3', '3ème période'], ['P4', '4ème période'], ['EX2', 'Examen 2ème semestre']];
+
+  const cl = rc.data, etObj = re.data, an = ra.data.lib || '';
+  /* Objet « classe » au format attendu par bulletin-modele.js */
+  const clB = { id: cl.id, nom: cl.nom, type: cl.type, modeleBulletin: cl.modele_bulletin };
+  const modeleOk = BULLETIN.estDisponible(clB);
+
+  /* ----- Emploi du temps ----- */
+  const H = rh.data || [];
+  const jours = [1, 2, 3, 4, 5, 6].filter(j => H.some(h => h.jour === j));
+  const hhmm = t => String(t || '').slice(0, 5);
+  const hHtml = jours.length
+    ? jours.map(j => '<div class="j"><b>' + JL[j] + '</b>' +
+        H.filter(h => h.jour === j).sort((a, b) => String(a.heure_debut).localeCompare(String(b.heure_debut))).map(h =>
+          '<div class="ln"><span>' + esc(hhmm(h.heure_debut)) + '–' + esc(hhmm(h.heure_fin)) + ' · ' + esc(h.matiere) + '</span><small>' +
+          esc(h.enseignant || '') + (h.salle ? ' · ' + esc(h.salle) : '') + '</small></div>').join('') + '</div>').join('')
+    : '<p class="v">Aucun cours programmé.</p>';
+
+  /* ----- Présences ----- */
+  const C = { P: 0, A: 0, R: 0, E: 0 }, abs = [];
+  (rp.data || []).forEach(r => { C[r.statut] = (C[r.statut] || 0) + 1; if (r.statut === 'A') abs.push(r.date_appel); });
+  abs.sort().reverse();
+  const tot = C.P + C.A + C.R + C.E;
+  const taux = tot ? Math.round((C.P + C.R) / tot * 100) : null;
+
+  /* ----- Notes ----- */
+  const MAT = (rm.data || []).map(m => ({ id: m.id, nom: m.nom, coef: +m.coef || 1, max: +m.note_max || 20 }));
+  const N = {};                                   // format attendu par le bulletin : matiere_PERIODE -> { eleveId: valeur }
+  (rn.data || []).forEach(r => { (N[r.matiere_id + '_' + r.periode] = N[r.matiere_id + '_' + r.periode] || {})[el.id] = +r.valeur; });
+  const note = (m, p) => (N[m.id + '_' + p] || {})[el.id];
+  const moyP = p => {
+    let pts = 0, co = 0;
+    MAT.forEach(m => { const v = note(m, p); if (v !== undefined) { pts += v / m.max * 20 * m.coef; co += m.coef; } });
+    return co ? pts / co : null;
+  };
+  const moyA = () => { const a = PER.map(([k]) => moyP(k)).filter(x => x !== null); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; };
+  const c20 = v => v === null ? '' : v >= 14 ? 'bon' : v >= 10 ? 'moy' : 'bas';
+  const f2 = v => v === null ? '—' : v.toFixed(2);
+
+  function tabNotes(p) {
+    if (p === 'ANNUEL') {
+      const m = moyA();
+      return '<table><tr><th>Période</th><th>Moyenne /20</th></tr>' +
+        PER.map(([k, l]) => { const v = moyP(k); return '<tr><td>' + l + '</td><td class="' + c20(v) + '">' + f2(v) + '</td></tr>'; }).join('') +
+        '<tr><td><b>Moyenne annuelle</b></td><td class="' + c20(m) + '"><b>' + f2(m) + '</b></td></tr></table>';
+    }
+    const m = moyP(p);
+    if (!MAT.length) return '<p class="v">Aucune matière définie.</p>';
+    return '<table><tr><th>Matière</th><th>Coef</th><th>Note</th><th>/20</th></tr>' +
+      MAT.map(x => {
+        const v = note(x, p);
+        return '<tr><td>' + esc(x.nom) + '</td><td>' + x.coef + '</td><td>' + (v === undefined ? '—' : v + '/' + x.max) + '</td><td>' +
+          (v === undefined ? '—' : (v / x.max * 20).toFixed(1)) + '</td></tr>';
+      }).join('') +
+      '<tr><td colspan="3"><b>Moyenne</b></td><td class="' + c20(m) + '"><b>' + f2(m) + '</b></td></tr></table>';
+  }
+
+  /* ----- Frais et paiements ----- */
+  const FR = (rf.data || []).filter(f => !f.classe_id || f.classe_id === el.classe_id);
+  const PA = rpa.data || [];
+  const D = FR.reduce((s, f) => s + +f.montant, 0);
+  const Pd = PA.reduce((s, p) => s + +p.montant, 0);
+  const pct = D ? Math.min(100, Math.round(Pd / D * 100)) : 0;
+  const reste = Math.max(0, D - Pd);
+  const solde = (D === 0) || (reste <= 0);
+
+  /* ----- Bloc bulletin (3 états : indisponible / verrouillé / disponible) ----- */
+  const blocBulletin = !modeleOk
+    ? '<div class="blo">ℹ️ ' + esc(BULLETIN.MOTIF) + '</div><button class="btn" disabled>📥 Bulletin indisponible</button>'
+    : solde
+      ? '<p style="font-size:.9rem;margin:0 0 4px">✅ Vous avez soldé vos frais scolaires. Vous pouvez télécharger et imprimer votre bulletin officiel.</p>' +
+        '<button class="btn" id="btnBulletin">📥 Télécharger mon bulletin</button>'
+      : '<p style="font-size:.9rem;margin:0 0 4px">🔒 Le bulletin devient disponible dès que tous les frais scolaires de l\'année sont réglés.</p>' +
+        '<div class="blo">💡 Reste à payer : <b>' + fmt(reste) + '</b><br>Présentez-vous au secrétariat avec ce montant pour débloquer votre bulletin.</div>' +
+        '<button class="btn" disabled>📥 Bulletin verrouillé</button>';
+
+  /* ----- Rendu principal ----- */
+  app.innerHTML =
+    '<div class="card"><h2>🧒 ' + esc([el.nom, el.postnom, el.prenom].filter(Boolean).join(' ')) + '</h2>' +
+      '<div class="ln"><span>Matricule</span><b>' + esc(el.matricule || '—') + '</b></div>' +
+      '<div class="ln"><span>Classe</span><b>' + esc(cl.nom || '—') + '</b></div>' +
+      '<div class="ln"><span>Établissement</span><b>' + esc(etObj.nom || '') + '</b></div>' +
+      '<div class="ln"><span>Année scolaire</span><b>' + esc(an) + '</b></div></div>' +
+    '<div class="card"><h2>🕐 Emploi du temps</h2>' + hHtml + '</div>' +
+    '<div class="card"><h2>✅ Présences</h2>' +
+      '<div class="stat"><div><b class="bon">' + C.P + '</b>Présent</div><div><b class="moy">' + C.R + '</b>Retard</div>' +
+      '<div><b class="bas">' + C.A + '</b>Absent</div><div><b>' + C.E + '</b>Excusé</div></div>' +
+      (taux !== null ? '<p style="margin:10px 0 0">Assiduité : <b class="' + (taux >= 85 ? 'bon' : taux >= 70 ? 'moy' : 'bas') + '">' + taux + '%</b></p>' : '<p class="v">Aucun appel enregistré.</p>') +
+      (abs.length ? '<small>Dernières absences : ' + abs.slice(0, 5).map(fmtD).map(esc).join(' · ') + '</small>' : '') +
+    '</div>' +
+    '<div class="card"><h2>📝 Notes</h2>' +
+      '<select id="per">' + PER.map(([k, l]) => '<option value="' + k + '">' + l + '</option>').join('') + '<option value="ANNUEL">Résumé annuel</option></select>' +
+      '<div id="nt">' + tabNotes('P1') + '</div></div>' +
+    '<div class="card"><h2>💵 Frais scolaires</h2>' +
+      (D
+        ? '<div class="ln"><span>Total à payer</span><b>' + fmt(D) + '</b></div>' +
+          '<div class="ln"><span>Déjà payé</span><b class="bon">' + fmt(Pd) + '</b></div>' +
+          '<div class="ln"><span>Reste</span><b class="' + (reste > 0 ? 'bas' : 'bon') + '">' + fmt(reste) + '</b></div>' +
+          '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+        : '<p class="v">Aucun frais défini.</p>') +
+      (PA.length ? '<h2 style="margin-top:14px;font-size:.95rem">Mes paiements</h2>' +
+        PA.map(p => '<div class="ln"><span>' + esc(fmtD(p.date_paiement)) + '</span><b>' + fmt(p.montant) + '</b></div>').join('') : '') +
+    '</div>' +
+    '<div class="card"><h2>📄 Bulletin scolaire</h2>' + blocBulletin + '</div>';
+
+  const perSel = document.getElementById('per');
+  if (perSel) perSel.addEventListener('change', e => { document.getElementById('nt').innerHTML = tabNotes(e.target.value); });
+  const btnB = document.getElementById('btnBulletin');
+  if (btnB) btnB.addEventListener('click', () => ouvrirBulletin().catch(e => erreur('Impossible d\'ouvrir le bulletin', e)));
+
+  /* ===== Bulletin officiel RDC ===== */
+  async function ouvrirBulletin() {
+    if (!modeleOk) return alert(BULLETIN.MOTIF);
+    if (!solde) return alert('Votre bulletin est verrouillé : il reste ' + fmt(reste) + ' à payer.');
+    // Rang dans la classe : calculé par la base (moyenne annuelle sur 6 périodes), sans exposer les notes des camarades
+    let rang = '', nEl = '';
+    const rr = await sb.rpc('kalasa_mon_rang');
+    if (!rr.error && rr.data && rr.data[0]) { rang = Number(rr.data[0].rang); nEl = Number(rr.data[0].n_eleves); }
+    BULLETIN.ouvrir({
+      eleve: { id: el.id, nom: el.nom, postnom: el.postnom, prenom: el.prenom, sexe: el.sexe, lieuNaiss: '', naiss: fmtD(el.date_naissance) },
+      classe: clB,
+      etab: etObj,
+      annee: an,
+      notes: N,
+      matieres: MAT,
+      rang, nEleves: nEl
+    });
+  }
+} catch (e) {
+  if (e !== 'stop') erreur('Erreur d\'initialisation de la page', e);
+}
+</script>
+</body></html>
