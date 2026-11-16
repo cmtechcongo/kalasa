@@ -16,7 +16,10 @@
 .chips{display:flex;gap:8px;font-size:.8rem;margin-top:4px;opacity:.85}
 .taux{font-size:1.2rem;font-weight:700}
 .warn{word-break:break-word}
-</style></head><body>
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head><body>
 <header>🎓 KALASA</header>
 <nav id="nav"></nav>
 <main>
@@ -51,8 +54,10 @@
       <div><label>Au</label><input id="fin" type="date"></div>
     </div>
     <div class="acts">
+      <button class="sec" id="bpdr">📄 Rapport (PDF)</button>
+      <button class="sec" id="bpdj">📄 Absences et retards (PDF)</button>
       <button class="sec" id="bexr">⬇ Rapport (CSV)</button>
-      <button class="sec" id="bexj">⬇ Journal détaillé</button>
+      <button class="sec" id="bexj">⬇ Journal détaillé (CSV)</button>
     </div>
   </div>
   <div class="card" id="resume"></div>
@@ -62,18 +67,26 @@
 
 <script type="module">
 import { sb, exigerSession } from './kalasa-db.js';
+import { entetePdf, signaturesPdf } from './kalasa-doc.js';
 
 const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant', 'surveillant']);
 const SURV = C.role === 'surveillant';
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const fmtD = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
 const nom = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
 const STAT = [['P', 'Présent'], ['A', 'Absent'], ['R', 'Retard'], ['E', 'Excusé']];
+const LIB = { A: 'Absent', R: 'Retard', E: 'Excusé' };
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
+const pdfDispo = () => !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable);
 
 let ETABS = [], ANNEES = [], CLASSES = [], ELEVES = [], TEL = {}, REC = {}, RAP = [], M = 'A', tok = 0;
 const cid = () => $('classe').value;
+const txtSel = id => $(id)?.selectedOptions?.[0]?.text || '';
+const etabCourant = () => ETABS.find(x => x.id === $('etab').value) || { nom: '', adresse: '' };
+
+if (SURV) { $('bexr').style.display = 'none'; $('bexj').style.display = 'none'; }
 
 /* Lecture par pages de 1000 lignes (la limite par défaut du serveur) */
 async function toutLire(creer) {
@@ -95,7 +108,7 @@ function anneeDefaut() {
 
 async function init() {
   const [re, ra, rc] = await Promise.all([
-    sb.from('etablissements').select('id, nom').order('nom'),
+    sb.from('etablissements').select('id, nom, adresse, telephone, chef').order('nom'),
     sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
     sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
   ]);
@@ -265,6 +278,7 @@ function rapport() {
   }).join('') : '<p style="text-align:center;opacity:.6">Aucun élève dans cette classe</p>';
 }
 
+/* ===== Export CSV ===== */
 function telecharger(nomf, h, r) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
@@ -280,10 +294,44 @@ function exportJournal() {
   const rows = [];
   RAP.forEach(r => {
     const e = ELEVES.find(x => x.id === r.inscription_id);
-    if (e && r.statut !== 'P') rows.push([r.date_appel, e.matricule, nom(e), { A: 'Absent', R: 'Retard', E: 'Excusé' }[r.statut], r.motif].map(q).join(';'));
+    if (e && r.statut !== 'P') rows.push([r.date_appel, e.matricule, nom(e), LIB[r.statut], r.motif].map(q).join(';'));
   });
   if (!rows.length) return alert('Aucune absence ni retard sur cette période');
   telecharger('journal_absences.csv', ['Date', 'Matricule', 'Élève', 'Statut', 'Motif'], rows);
+}
+
+/* ===== Export PDF (en-tête de l'établissement + signatures) ===== */
+function pdfDoc(titre, head, body, foot, fichier) {
+  if (!pdfDispo()) return alert('PDF indisponible : connexion Internet requise pour charger jsPDF.');
+  const et = etabCourant();
+  const sous = txtSel('classe') + ' · ' + txtSel('annee') + ' · Du ' + fmtD($('deb').value) + ' au ' + fmtD($('fin').value);
+  const d = new window.jspdf.jsPDF();
+  const y0 = entetePdf(d, et, titre, sous);
+  d.autoTable({ head: [head], body, foot: foot ? [foot] : undefined, startY: y0, styles: { fontSize: 8 },
+    headStyles: { fillColor: [37, 99, 235] }, footStyles: { fillColor: [100, 100, 100] } });
+  signaturesPdf(d, (d.lastAutoTable || {}).finalY || y0,
+    [{ titre: SURV ? 'Le surveillant' : 'Établi par', nom: C.nom_complet }, { titre: "Le chef d'établissement", nom: et.chef || '' }]);
+  d.save(fichier);
+}
+function pdfRapport() {
+  const { lignes } = calc(); if (!lignes.length) return alert('Rien à exporter');
+  const s = k => lignes.reduce((a, l) => a + l[k], 0);
+  const marq = lignes.filter(l => l.tot), moy = marq.length ? Math.round(marq.reduce((a, l) => a + l.taux, 0) / marq.length) : null;
+  pdfDoc('Rapport de présences',
+    ['N°', 'Matricule', 'Élève', 'Présent', 'Absent', 'Retard', 'Excusé', 'Appels', 'Taux'],
+    lignes.map((l, i) => [i + 1, l.e.matricule, nom(l.e), l.P, l.A, l.R, l.E, l.tot, l.taux === null ? '—' : l.taux + '%']),
+    ['', '', 'Total classe', s('P'), s('A'), s('R'), s('E'), s('tot'), moy === null ? '—' : moy + '%'],
+    'Rapport_presences_' + txtSel('classe').replace(/[^\w]+/g, '_') + '.pdf');
+}
+function pdfJournal() {
+  const rows = [];
+  RAP.forEach(r => {
+    const e = ELEVES.find(x => x.id === r.inscription_id);
+    if (e && r.statut !== 'P') rows.push([fmtD(r.date_appel), e.matricule, nom(e), LIB[r.statut], r.motif || '']);
+  });
+  if (!rows.length) return alert('Aucune absence ni retard sur cette période');
+  pdfDoc('Absences et retards', ['Date', 'Matricule', 'Élève', 'Statut', 'Motif'], rows, null,
+    'Absences_' + txtSel('classe').replace(/[^\w]+/g, '_') + '.pdf');
 }
 
 $('etab').addEventListener('change', async () => { await chargerParents(); await majClasses(); });
@@ -297,6 +345,8 @@ $('tR').addEventListener('click', () => mode('R'));
 $('btous').addEventListener('click', tous);
 $('bexr').addEventListener('click', exportRapport);
 $('bexj').addEventListener('click', exportJournal);
+$('bpdr').addEventListener('click', pdfRapport);
+$('bpdj').addEventListener('click', pdfJournal);
 $('liste').addEventListener('click', e => {
   const b = e.target.closest('[data-m]'); if (b) return marquer(b.dataset.id, b.dataset.m);
   const n = e.target.closest('[data-n]'); if (n) note(n.dataset.n);
