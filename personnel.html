@@ -31,6 +31,10 @@ a.tel{color:inherit}
   <label>Fonction *</label><select id="fonction"></select>
 
   <div id="ens" style="display:none">
+    <label>Niveau</label><select id="niveau"></select>
+    <div id="blocClasse" style="display:none">
+      <label>Classe assignée * <small>(un seul enseignant par classe)</small></label><select id="classe"></select>
+    </div>
     <label>Matière(s) enseignée(s)</label><input id="matiere" placeholder="Ex : Mathématiques, Physique">
   </div>
 
@@ -76,13 +80,17 @@ const C = await exigerSession(['admin', 'directeur', 'secretaire']);
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const FONCTIONS = ['Enseignant', "Directeur / Chef d'établissement", 'Préfet des études', 'Secrétaire', 'Comptable / Économe', 'Surveillant / Discipline', 'Bibliothécaire', 'Autre'];
+const NIV = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Cycle terminal', 'Humanité', 'Université'];
+const NIV_UNIQUE = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal'];   // un seul enseignant par classe
 const ETABS = C.etablissements || [];
 let L = [], eid = null, photo = '';
+let CLASSES = [];
 
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
 const notifier = t => { const m = $('msg'); m.textContent = t; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 2000); };
 const etabCourant = () => $('etab').value;
 const nomEtab = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code || '—') : '—'; };
+const nomClasse = id => (CLASSES.find(c => c.id === id) || {}).nom || '';
 const total = x => (+x.salaire || 0) + (+x.prime || 0) + (+x.allocation || 0);
 const nul = v => { v = String(v ?? '').trim(); return v === '' ? null : v; };
 
@@ -93,7 +101,30 @@ function init() {
   $('filtre').innerHTML = '<option value="">Toutes les fonctions</option>' + FONCTIONS.map(r => `<option>${esc(r)}</option>`).join('');
   majEns(); apercu();
 }
-function majEns() { $('ens').style.display = $('fonction').value === 'Enseignant' ? 'block' : 'none'; }
+
+/* Enseignant : bloc niveau / classe / matière */
+function majEns() { $('ens').style.display = $('fonction').value === 'Enseignant' ? 'block' : 'none'; majNiv(); }
+
+/* Classe assignée : seulement pour Maternelle → Terminal (un seul enseignant par classe) */
+function majNiv() {
+  const u = $('fonction').value === 'Enseignant' && NIV_UNIQUE.includes($('niveau').value);
+  $('blocClasse').style.display = u ? 'block' : 'none';
+  if (!u) return;
+  const cur = $('classe').value, n = $('niveau').value;
+  const pris = new Set(L.filter(x => x.classe_id && x.id !== eid).map(x => x.classe_id));
+  const l = CLASSES.filter(c => c.type === n).sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr', { numeric: true }));
+  $('classe').innerHTML = '<option value="">— Choisir la classe —</option>' +
+    l.map(c => `<option value="${esc(c.id)}" ${pris.has(c.id) ? 'disabled' : ''}>${esc(c.nom)}${pris.has(c.id) ? ' (déjà assignée)' : ''}</option>`).join('');
+  $('classe').value = cur;
+}
+async function chargerClasses() {
+  CLASSES = [];
+  if (!etabCourant()) return;
+  let a = ''; try { a = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee || ''; } catch (_) {}
+  const r = await sb.from('classes').select('id, nom, type, annee_id').eq('etablissement_id', etabCourant());
+  CLASSES = (r.data || []).filter(c => !a || c.annee_id === a);
+}
+
 function apercu() {
   $('apercu').src = photo || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#8884"/><circle cx="48" cy="38" r="16" fill="#8889"/><ellipse cx="48" cy="84" rx="28" ry="22" fill="#8889"/></svg>');
 }
@@ -136,8 +167,12 @@ async function enregistrer(e) {
   if (!etabCourant()) return erreur('Choisissez un établissement.');
   if (!nom || !prenom || !$('sexe').value || !tel) return erreur('Remplissez les champs obligatoires : nom, prénom, sexe, téléphone.');
   const ens = $('fonction').value === 'Enseignant';
+  const uniq = ens && NIV_UNIQUE.includes($('niveau').value);
+  if (uniq && !$('classe').value) return erreur('Choisissez la classe assignée à cet enseignant.');
   const d = {
     fonction: $('fonction').value,
+    niveau: ens ? nul($('niveau').value) : null,
+    classe_id: uniq ? $('classe').value : null,
     matiere: ens ? nul($('matiere').value) : null,
     nom, postnom: nul($('postnom').value), prenom,
     sexe: $('sexe').value,
@@ -163,8 +198,12 @@ async function enregistrer(e) {
       if (err) throw err;
     }
     notifier(eid ? '✔ Modifié' : '✔ Enregistré');
-    reinit(); await charger();
-  } catch (x) { erreur('Enregistrement impossible : ' + esc(x.message || x)); }
+    reinit(); await charger(); majNiv();
+  } catch (x) {
+    erreur(x.code === '23505' && /classe/.test(x.message || '')
+      ? 'Cette classe a déjà un enseignant.'
+      : 'Enregistrement impossible : ' + esc(x.message || x));
+  }
   b.disabled = false;
 }
 
@@ -177,11 +216,15 @@ function reinit() {
 }
 function modifier(id) {
   const x = L.find(p => p.id === id); if (!x) return;
+  eid = id;
   $('etab').value = x.etablissement_id; $('etab').disabled = true;
-  $('fonction').value = x.fonction; majEns();
+  $('fonction').value = x.fonction;
+  $('niveau').value = x.niveau || '';
+  majEns();
+  $('classe').value = x.classe_id || '';
   const m = { matiere: 'matiere', nom: 'nom', postnom: 'postnom', prenom: 'prenom', sexe: 'sexe', embauche: 'date_embauche', tel: 'telephone', email: 'email', adresse: 'adresse', salaire: 'salaire', prime: 'prime', allocation: 'allocation' };
   Object.keys(m).forEach(k => $(k).value = x[m[k]] ?? '');
-  photo = x.photo || ''; apercu(); eid = id;
+  photo = x.photo || ''; apercu();
   $('t').textContent = 'Modifier — ' + x.matricule; $('ann').style.display = 'block';
   scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -191,7 +234,7 @@ async function supprimer(id) {
   if (!confirm('Supprimer cette personne ?')) return;
   const { error } = await sb.from('personnel').delete().eq('id', id);
   if (error) return erreur('Suppression impossible : ' + esc(error.message));
-  await charger();
+  await charger(); majNiv();
 }
 
 function filtrees() {
@@ -207,6 +250,7 @@ function rendu() {
     <div class="info"><b>${esc(x.nom)} ${esc(x.postnom)} ${esc(x.prenom)}</b>
       <small><span class="tag">${esc(x.fonction)}</span> ${esc(x.matricule)}${x.utilisateur_id ? ' · 🔑 compte' : ''}</small>
       ${x.matiere ? `<small>📘 ${esc(x.matiere)}</small>` : ''}
+      ${x.classe_id ? `<small>👥 ${esc(nomClasse(x.classe_id) || 'Classe assignée')}${x.niveau ? ' · ' + esc(x.niveau) : ''}</small>` : (x.niveau ? `<small>🎓 ${esc(x.niveau)}</small>` : '')}
       <small>📞 <a class="tel" href="tel:${esc(x.telephone)}">${esc(x.telephone)}</a>${x.email ? ' · ✉ ' + esc(x.email) : ''}</small>
       <small>💰 Salaire : ${(+x.salaire || 0).toLocaleString('fr-FR')} · Prime : ${(+x.prime || 0).toLocaleString('fr-FR')} · Allocation : ${(+x.allocation || 0).toLocaleString('fr-FR')} → <b>Total : ${total(x).toLocaleString('fr-FR')}</b></small>
       <small>🏫 ${esc(nomEtab(x.etablissement_id))}</small></div>
@@ -215,8 +259,8 @@ function rendu() {
 }
 function exporter() {
   const t = filtrees(); if (!t.length) return notifier('Rien à exporter');
-  const h = ['Matricule', 'Nom', 'Postnom', 'Prénom', 'Sexe', 'Téléphone', 'E-mail', 'Fonction', 'Matière', 'Établissement', 'Embauche', 'Adresse', 'Salaire', 'Prime', 'Allocation', 'Total rémunération'];
-  const r = t.map(x => [x.matricule, x.nom, x.postnom, x.prenom, x.sexe, x.telephone, x.email, x.fonction, x.matiere, nomEtab(x.etablissement_id), x.date_embauche, x.adresse, +x.salaire || 0, +x.prime || 0, +x.allocation || 0, total(x)]
+  const h = ['Matricule', 'Nom', 'Postnom', 'Prénom', 'Sexe', 'Téléphone', 'E-mail', 'Fonction', 'Niveau', 'Classe', 'Matière', 'Établissement', 'Embauche', 'Adresse', 'Salaire', 'Prime', 'Allocation', 'Total rémunération'];
+  const r = t.map(x => [x.matricule, x.nom, x.postnom, x.prenom, x.sexe, x.telephone, x.email, x.fonction, x.niveau, nomClasse(x.classe_id), x.matiere, nomEtab(x.etablissement_id), x.date_embauche, x.adresse, +x.salaire || 0, +x.prime || 0, +x.allocation || 0, total(x)]
     .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + [h.join(';'), ...r].join('\n')], { type: 'text/csv;charset=utf-8' }));
@@ -225,7 +269,8 @@ function exporter() {
 
 $('f').addEventListener('submit', enregistrer);
 $('fonction').addEventListener('change', majEns);
-$('etab').addEventListener('change', () => { if (!eid) charger(); });
+$('niveau').addEventListener('change', majNiv);
+$('etab').addEventListener('change', async () => { if (!eid) { await chargerClasses(); await charger(); majNiv(); } });
 $('bphoto').addEventListener('click', () => $('fichier').click());
 $('fichier').addEventListener('change', e => choisirPhoto(e.target));
 $('ann').addEventListener('click', reinit);
@@ -238,7 +283,10 @@ $('liste').addEventListener('click', e => {
   if (b.dataset.del) supprimer(b.dataset.del);
 });
 
+$('niveau').innerHTML = '<option value="">— Choisir —</option>' + NIV.map(n => `<option>${esc(n)}</option>`).join('');
 init();
+await chargerClasses();
 await charger();
+majNiv();
 </script><script type="module" src="kalasa-ui.js"></script>
 </body></html>
