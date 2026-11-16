@@ -46,7 +46,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const ETABS = C.etablissements || [];
 const nomE = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code) : '—'; };
 const ROLES = { admin: 'Administrateur', directeur: 'Directeur', secretaire: 'Secrétaire', enseignant: 'Enseignant', caissier: 'Caissier', surveillant: 'Surveillant', eleve: 'Élève' };
-const FONCTION_REQUISE = { enseignant: 'Enseignant', surveillant: 'Surveillant' };
+const FONCTION_REQUISE = { enseignant: 'Enseignant', surveillant: 'Surveillant / Discipline' };
 const cle = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
 const normM = m => String(m || '').replace(/\s+/g, '').toUpperCase();
 const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
