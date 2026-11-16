@@ -129,6 +129,7 @@ window.KAUDIT = { log: auditer };
 /* ---------- État ---------- */
 let ANNEES = [], CLASSES = [], INS = [], MAT = [], ENSL = [], VER = {}, N = {};
 let ETAB_ROW = {}, ANNEE = '', eid = null, T = 'M';
+let TIT = {};                 // classe → enseignant titulaire (Maternelle → Terminal), chargé pour la direction
 let MES_FICHES = new Set();   // fiches Personnel reliées au compte connecté
 const cid = () => $('classe').value;
 const cl = id => CLASSES.find(c => c.id === id);
@@ -152,9 +153,10 @@ const PER_SEM = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 
 const PER_TRI = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 1er trimestre'],['P3','3ème période'],['P4','4ème période'],['EX2','Examen 2ème trimestre'],['P5','5ème période'],['P6','6ème période'],['EX3','Examen 3ème trimestre']];   // Maternelle → Terminal
 const PER_UNI = [['S1','1ère section'],['S2','2ème section']];   // Université
 const NIV_NORM = { 'Maternel': 'Maternelle', 'Elémentaire': 'Élémentaire' };
-const NIV_TRI = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Primaire'];
+const NIV_TRI = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Primaire'];   // un seul enseignant par classe
 const niveauDe = c => c ? (NIV_NORM[c.type] || c.type || (optDe(c) ? 'Humanité' : '')) : '';
 const perDe = c => { const n = niveauDe(c); return n === 'Université' ? PER_UNI : NIV_TRI.includes(n) ? PER_TRI : PER_SEM; };
+const classeUnique = () => NIV_TRI.includes(niveauDe(cl(cid())));
 let PER = PER_SEM;
 
 const mention = m => m >= 16 ? 'Très bien' : m >= 14 ? 'Bien' : m >= 12 ? 'Assez bien' : m >= 10 ? 'Passable' : 'Insuffisant';
@@ -196,8 +198,17 @@ async function init() {
     MES_FICHES = new Set(ENSL.filter(p => p.utilisateur_id === C.id).map(p => p.id));
     VER = {}; verrous.forEach(v => { VER[v.periode] = { ferme: v.ferme, par: v.par, le: v.le }; });
 
+    /* Titulaires de classe (Maternelle → Terminal) : lus par la direction pour attribuer les matières */
+    TIT = {};
+    if (GERE) {
+      try {
+        (await lire(sb.from('personnel').select('id, classe_id').eq('etablissement_id', ETAB).not('classe_id', 'is', null)))
+          .forEach(p => { TIT[p.classe_id] = p.id; });
+      } catch (_) {}
+    }
+
     $('ctx').textContent = '🏫 ' + (ETAB_ROW.nom || '') + ' · Année ' + ((ANNEES.find(a => a.id === ANNEE) || {}).lib || '');
-    const visibles = ENS ? CLASSES.filter(c => MAT.some(m => m.classe === c.id && MES_FICHES.has(m.ens))) : CLASSES;
+    const visibles = CLASSES;   // la base ne renvoie déjà que les classes de l'enseignant connecté
     $('classe').innerHTML = visibles.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option ? ' · ' + c.option : ''))}</option>`).join('')
       || '<option value="">Aucune classe</option>';
     avertir([[!CLASSES.length, '<a href="classe.html">des classes</a>'], [!INS.length, '<a href="eleve.html">des élèves</a>']]);
@@ -222,13 +233,17 @@ async function okMat(e) {
   if (!GERE) return alert('Réservé à la direction.');
   if (!cid()) return alert('Choisissez une classe.');
   const d = { nom: $('mn').value.trim(), coef: +$('mc').value, max: +$('mx').value, ens: $('me').value };
+  /* Maternelle → Terminal : l'enseignant est celui de la classe (imposé) */
+  const uniq = classeUnique();
+  if (uniq && !TIT[cid()]) return alert('Aucun enseignant n\'est assigné à cette classe : assignez-le d\'abord dans la page Personnel.');
+  if (uniq) d.ens = TIT[cid()];
   if (!d.ens) return alert('Attribuez cette matière à un enseignant.');
   const dbl = mats().find(x => x.id !== eid && cle1(x.nom) === cle1(d.nom));
   if (dbl) return alert('Refusé : « ' + dbl.nom + ' » existe déjà dans cette classe' + (dbl.ens ? ' (attribuée à ' + nomEns(dbl.ens) + ')' : '') + '. Une matière ne peut être attribuée qu\'à un seul enseignant.');
   const P = ENSL.find(x => x.id === d.ens);
   if (!P) return alert('Enseignant introuvable pour cet établissement.');
   const liste = String(P.matiere || '').split(/[,;\/]/).map(cle1).filter(Boolean), n = cle1(d.nom);
-  if (liste.length && !liste.some(x => n.includes(x) || x.includes(n)))
+  if (!uniq && liste.length && !liste.some(x => n.includes(x) || x.includes(n)))
     return alert('Refusé : « ' + d.nom + ' » ne figure pas dans les matières enseignées par ' + P.nom_complet + ' (fiche Personnel).');
   const ligne = { nom: d.nom, coef: d.coef, note_max: d.max, personnel_id: d.ens };
   try {
@@ -249,7 +264,7 @@ async function okMat(e) {
     else erreur('Enregistrement impossible : ' + esc(mess(x)));
   }
 }
-function resetMat() { $('mn').value = ''; $('mc').value = 1; $('mx').value = 20; $('me').value = ''; eid = null; $('tm').textContent = 'Nouvelle matière'; $('ma').style.display = 'none'; }
+function resetMat() { $('mn').value = ''; $('mc').value = 1; $('mx').value = 20; $('me').value = classeUnique() ? (TIT[cid()] || '') : ''; eid = null; $('tm').textContent = 'Nouvelle matière'; $('ma').style.display = 'none'; }
 function editMat(id) {
   const m = MAT.find(x => x.id === id); if (!m) return;
   $('mn').value = m.nom; $('mc').value = m.coef; $('mx').value = m.max; $('me').value = m.ens || '';
@@ -271,13 +286,16 @@ function rEns() {
   const c = $('me').value;
   $('me').innerHTML = '<option value="">— Choisir l\'enseignant —</option>' +
     ENSL.map(p => `<option value="${esc(p.id)}">${esc(p.nom_complet)}${p.matiere ? ' · ' + esc(p.matiere) : ''}</option>`).join('');
-  $('me').value = c;
+  const uniq = classeUnique();
+  $('me').disabled = uniq;                       // Maternelle → Terminal : enseignant imposé par la classe
+  $('me').value = uniq ? (TIT[cid()] || '') : c;
 }
 function rMat() {
   $('fm').style.display = GERE ? '' : 'none'; rEns();
   const l = GERE ? mats() : matsSaisie();
   const aide = GERE && !ENSL.length ? '<p class="vide">Aucun enseignant : ajoutez-en dans la page <a href="personnel.html">Personnel</a> pour cet établissement.</p>' : '';
-  $('lm').innerHTML = aide + (l.length ? l.map(m => `<div class="card el"><div class="info"><b>${esc(m.nom)}</b><small>Coef ${m.coef} · sur ${m.max} · 👤 ${esc(nomEns(m.ens) || 'Non attribué')}</small></div>
+  const aideTit = GERE && classeUnique() && !TIT[cid()] ? '<p class="vide">Aucun enseignant n\'est assigné à cette classe : assignez-le dans la page <a href="personnel.html">Personnel</a> avant de créer les matières.</p>' : '';
+  $('lm').innerHTML = aide + aideTit + (l.length ? l.map(m => `<div class="card el"><div class="info"><b>${esc(m.nom)}</b><small>Coef ${m.coef} · sur ${m.max} · 👤 ${esc(nomEns(m.ens) || 'Non attribué')}</small></div>
     ${GERE ? `<div class="b"><button class="sec" onclick="editMat('${m.id}')">✎</button><button class="del" onclick="delMat('${m.id}')">✕</button></div>` : ''}</div>`).join('') :
     `<p class="vide">${GERE ? 'Aucune matière pour cette classe' : 'Aucune matière ne vous est attribuée dans cette classe : la direction doit vous l\'attribuer'}</p>`);
 }
@@ -403,7 +421,7 @@ function rBull() {
   majPerBull();
   const { liste } = classement($('bp').value), ok = dispo();
   $('lb').innerHTML = (ok || !liste.length ? '' : `<div class="card" style="border-left:4px solid #f59e0b">⚠ ${esc(window.BULLETIN && BULLETIN.MOTIF || 'Modèle de bulletin indisponible pour cette classe.')}</div>`) +
-  (liste.length ? liste.map(x => `<div class="card el" data-id="${x.e.id}" data-rech="${esc(cleBull(x.e))}"><div class="rang">${x.m === null ? '—' : x.rang + (x.rang === 1 ? 'er' : 'e')}</div>${av(x.e)}
+    (liste.length ? liste.map(x => `<div class="card el" data-id="${x.e.id}" data-rech="${esc(cleBull(x.e))}"><div class="rang">${x.m === null ? '—' : x.rang + (x.rang === 1 ? 'er' : 'e')}</div>${av(x.e)}
     <div class="info"><b>${esc(nom(x.e))}</b><small class="${x.m === null ? '' : coul(x.m)}">${x.m === null ? 'Pas de notes' : x.m.toFixed(2) + '/20 · ' + mention(x.m)}</small></div>
     <button class="sec" ${ok ? `onclick="bulletin('${x.e.id}')"` : 'disabled style="opacity:.4"'}>${ok ? '📄' : '🔒'}</button></div>`).join('') : '<p class="vide">Aucun élève</p>');
   const nb = liste.filter(x => x.m !== null).length, b = $('bPdf');
@@ -489,6 +507,7 @@ function imprimerGroupe(pages, titre) {
   document.body.appendChild(ov);
   ajusterGroupe(); ov.scrollTop = 0;
 }
+
 async function pdfBulletins() {
   const btn = $('bPdf'), etat = $('bEtat');
   if (!cid()) return alert('Choisissez une classe.');
@@ -497,7 +516,7 @@ async function pdfBulletins() {
   const p = $('bp').value, cls = classement(p), avec = cls.liste.filter(x => x.m !== null), sans = cls.liste.length - avec.length;
   if (!avec.length) return alert('Aucun bulletin à exporter : aucune note pour cette période.');
   const titre = 'Bulletins de la ' + (c.nom || 'classe') + (c.option ? ' - ' + c.option : ''),
-        fichier = titre.replace(/[\\/:*?"<>|]+/g, '-').trim() + '.pdf';
+    fichier = titre.replace(/[\\/:*?"<>|]+/g, '-').trim() + '.pdf';
   btn.disabled = true; etat.className = '';
   try {
     etat.textContent = '⏳ Préparation des bulletins…';
@@ -512,7 +531,7 @@ async function pdfBulletins() {
       return;
     }
     const { jsPDF } = window.jspdf, pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }),
-          echelle = innerWidth < 800 ? 1.5 : 2;
+      echelle = innerWidth < 800 ? 1.5 : 2;
     pdf.setProperties({ title: titre });
     for (let i = 0; i < pages.length; i++) {
       etat.textContent = '⏳ Création du PDF ' + (i + 1) + '/' + pages.length + '…';
