@@ -45,14 +45,15 @@ const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ETABS = C.etablissements || [];
 const nomE = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code) : '—'; };
-const ROLES = { admin: 'Administrateur', directeur: 'Directeur', secretaire: 'Secrétaire', enseignant: 'Enseignant', caissier: 'Caissier', eleve: 'Élève' };
+const ROLES = { admin: 'Administrateur', directeur: 'Directeur', secretaire: 'Secrétaire', enseignant: 'Enseignant', caissier: 'Caissier', surveillant: 'Surveillant', eleve: 'Élève' };
+const FONCTION_REQUISE = { enseignant: 'Enseignant', surveillant: 'Surveillant' };
 const cle = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
 const normM = m => String(m || '').replace(/\s+/g, '').toUpperCase();
 const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
 
 let SANS = [], PROFILS = [], UE = {};
 
-$('role').innerHTML = ['enseignant', 'secretaire', 'directeur', 'caissier', 'admin']
+$('role').innerHTML = ['enseignant', 'secretaire', 'directeur', 'caissier', 'surveillant', 'admin']
   .map(k => `<option value="${k}" ${k === 'enseignant' ? 'selected' : ''}>${ROLES[k]}</option>`).join('')
   + '<option value="eleve" disabled>Élève (bientôt disponible)</option>';
 $('etabs').innerHTML = ETABS.map(e => `<label><input type="checkbox" value="${esc(e.id)}"> ${esc(e.nom || e.code)}</label>`).join('') || '<small>Aucun établissement créé</small>';
@@ -200,12 +201,13 @@ async function creer(ev) {
       if (!F.length) throw new Error('Refusé : ce numéro matricule ne correspond pas à « ' + nom + ' ».');
       if (F.length > 1) throw new Error('Plusieurs fiches correspondent (établissements différents). Contactez le support.');
       const f = F[0];
-      if (role === 'enseignant' && f.fonction !== 'Enseignant') throw new Error('Refusé : dans la liste du personnel, ' + nomDe(f) + ' est « ' + f.fonction + ' », pas « Enseignant ».');
+      const requise = FONCTION_REQUISE[role];
+      if (requise && f.fonction !== requise) throw new Error('Refusé : dans la liste du personnel, ' + nomDe(f) + ' est « ' + f.fonction + ' », pas « ' + requise + ' ».');
       const etabs = [...document.querySelectorAll('#etabs input:checked')].map(i => i.value);
       if (!etabs.includes(f.etablissement_id)) etabs.push(f.etablissement_id);
 
       b.disabled = true; b.textContent = 'Création…';
-      r = await appeler('creer-utilisateurs-v3', { personnel_id: f.id, identifiant: login, mot_de_passe: mdp, role });
+      r = await appeler('creer-utilisateurs-v4', { personnel_id: f.id, identifiant: login, mot_de_passe: mdp, role });
       if (etabs.length > 1 && r.id) {
         try { await appeler('gerer-utilisateurs', { action: 'etablissements', user_id: r.id, etablissements: etabs }); }
         catch (e) { err.textContent = 'Compte créé, mais attribution des établissements impossible : ' + e.message; }
