@@ -17,6 +17,7 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}
 th,td{padding:7px 4px;text-align:left;border-bottom:1px solid #8883}
 th:not(:first-child),td:not(:first-child){text-align:right}
 .bar{height:8px;background:#8883;border-radius:4px;margin-top:8px}.bar i{display:block;height:8px;border-radius:4px;background:#16a34a}
+.sous{margin:14px 0 4px;font-size:.95rem;letter-spacing:.03em}
 .btn{width:100%;padding:14px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-size:1rem;font-weight:600;cursor:pointer;margin-top:10px}
 .btn[disabled]{background:#8885;cursor:not-allowed}
 .blo{background:#fef3c7;border-left:4px solid #f59e0b;color:#78350f;padding:12px;border-radius:8px;font-size:.88rem;margin-top:8px}
@@ -60,8 +61,8 @@ try {
     sb.from('presences').select('statut, date_appel').eq('inscription_id', el.id),
     sb.from('matieres').select('id, nom, coef, note_max').eq('classe_id', el.classe_id),
     sb.from('notes').select('matiere_id, periode, valeur').eq('inscription_id', el.id),
-    sb.from('frais').select('montant, classe_id').eq('etablissement_id', el.etablissement_id).eq('annee_id', el.annee_id),
-    sb.from('paiements').select('montant, date_paiement').eq('inscription_id', el.id).order('date_paiement', { ascending: false })
+    sb.from('frais').select('id, lib, montant, classe_id').eq('etablissement_id', el.etablissement_id).eq('annee_id', el.annee_id).order('date_creation'),
+    sb.from('paiements').select('montant, date_paiement, frais_id').eq('inscription_id', el.id).order('date_paiement', { ascending: false })
   ]);
   const err = [rc, re, ra, rh, rp, rm, rn, rf, rpa].find(r => r.error);
   if (err) throw err.error;
@@ -128,7 +129,7 @@ try {
       '<tr><td colspan="3"><b>Moyenne</b></td><td class="' + c20(m) + '"><b>' + f2(m) + '</b></td></tr></table>';
   }
 
-  /* ----- Frais et paiements ----- */
+  /* ----- Frais, paiements et détail du reste à payer ----- */
   const FR = (rf.data || []).filter(f => !f.classe_id || f.classe_id === el.classe_id);
   const PA = rpa.data || [];
   const D = FR.reduce((s, f) => s + +f.montant, 0);
@@ -136,6 +137,9 @@ try {
   const pct = D ? Math.min(100, Math.round(Pd / D * 100)) : 0;
   const reste = Math.max(0, D - Pd);
   const solde = (D === 0) || (reste <= 0);
+  const libF = id => (FR.find(f => f.id === id) || {}).lib || 'Frais';
+  const payeF = id => PA.filter(p => p.frais_id === id).reduce((s, p) => s + +p.montant, 0);
+  const detailReste = FR.map(f => ({ lib: f.lib, reste: Math.max(0, +f.montant - payeF(f.id)) })).filter(x => x.reste > 0);
 
   /* ----- Bloc bulletin (3 états : indisponible / verrouillé / disponible) ----- */
   const blocBulletin = !modeleOk
@@ -169,10 +173,14 @@ try {
         ? '<div class="ln"><span>Total à payer</span><b>' + fmt(D) + '</b></div>' +
           '<div class="ln"><span>Déjà payé</span><b class="bon">' + fmt(Pd) + '</b></div>' +
           '<div class="ln"><span>Reste</span><b class="' + (reste > 0 ? 'bas' : 'bon') + '">' + fmt(reste) + '</b></div>' +
-          '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+          '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+          (detailReste.length
+            ? '<h2 class="sous">RESTE À PAYER</h2>' + detailReste.map(x => '<div class="ln"><span>– ' + esc(x.lib) + '</span><b class="bas">' + fmt(x.reste) + '</b></div>').join('')
+            : '<p class="bon" style="margin:12px 0 0">✅ Tous les frais sont payés.</p>')
         : '<p class="v">Aucun frais défini.</p>') +
-      (PA.length ? '<h2 style="margin-top:14px;font-size:.95rem">Mes paiements</h2>' +
-        PA.map(p => '<div class="ln"><span>' + esc(fmtD(p.date_paiement)) + '</span><b>' + fmt(p.montant) + '</b></div>').join('') : '') +
+      (PA.length ? '<h2 class="sous">MES PAIEMENTS</h2>' +
+        PA.map(p => '<div class="ln"><span>' + esc(fmtD(p.date_paiement)) + '<br><small>' + esc(libF(p.frais_id)) + '</small></span><b>' + fmt(p.montant) + '</b></div>').join('')
+        : '') +
     '</div>' +
     '<div class="card"><h2>📄 Bulletin scolaire</h2>' + blocBulletin + '</div>';
 
