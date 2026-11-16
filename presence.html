@@ -16,6 +16,10 @@
 .chips{display:flex;gap:8px;font-size:.8rem;margin-top:4px;opacity:.85}
 .taux{font-size:1.2rem;font-weight:700}
 .warn{word-break:break-word}
+.ro{display:none;border-left:4px solid #f59e0b;font-size:.9rem}
+.badge{display:inline-block;margin-top:8px;padding:6px 12px;border-radius:99px;background:#8883;font-size:.82rem}
+.badge.P{background:#16a34a;color:#fff}.badge.A{background:#dc2626;color:#fff}
+.badge.R{background:#f59e0b;color:#fff}.badge.E{background:#6366f1;color:#fff}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -39,6 +43,7 @@
 </div>
 
 <section id="pA">
+  <div class="card ro" id="ro">👁 <b>Lecture seule.</b> Seuls les enseignants de la maternelle au cycle terminal peuvent faire l'appel. Pour cette classe, vous pouvez consulter les présences mais pas les modifier.</div>
   <div class="card">
     <label>Date de l'appel</label><input id="date" type="date">
     <div class="acts"><button class="sec" id="btous">✔ Marquer les non-marqués présents</button></div>
@@ -71,6 +76,7 @@ import { entetePdf, signaturesPdf } from './kalasa-doc.js';
 
 const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant', 'surveillant']);
 const SURV = C.role === 'surveillant';
+const ENS = C.role === 'enseignant';
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -78,6 +84,7 @@ const fmtD = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : ''
 const nom = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
 const STAT = [['P', 'Présent'], ['A', 'Absent'], ['R', 'Retard'], ['E', 'Excusé']];
 const LIB = { A: 'Absent', R: 'Retard', E: 'Excusé' };
+const LIBS = { P: '✅ Présent', A: '❌ Absent', R: '⏰ Retard', E: '📄 Excusé' };
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
 const pdfDispo = () => !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable);
 
@@ -85,6 +92,17 @@ let ETABS = [], ANNEES = [], CLASSES = [], ELEVES = [], TEL = {}, REC = {}, RAP 
 const cid = () => $('classe').value;
 const txtSel = id => $(id)?.selectedOptions?.[0]?.text || '';
 const etabCourant = () => ETABS.find(x => x.id === $('etab').value) || { nom: '', adresse: '' };
+
+/* L'enseignant ne peut faire l'appel que de la maternelle au cycle terminal (pas Humanité ni Université) */
+const nivOk = type => {
+  const t = String(type || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return !(t.startsWith('human') || t.startsWith('univ'));
+};
+const peutAppel = () => {
+  if (!ENS) return true;
+  const c = CLASSES.find(x => x.id === cid());
+  return !!c && nivOk(c.type);
+};
 
 if (SURV) { $('bexr').style.display = 'none'; $('bexj').style.display = 'none'; }
 
@@ -110,7 +128,7 @@ async function init() {
   const [re, ra, rc] = await Promise.all([
     sb.from('etablissements').select('id, nom, adresse, telephone, chef').order('nom'),
     sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
-    sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
+    sb.from('classes').select('id, etablissement_id, annee_id, type, nom, option_faculte')
   ]);
   const err = re.error || ra.error || rc.error;
   if (err) return erreur('Lecture impossible : ' + esc(err.message));
@@ -203,6 +221,7 @@ async function rendu() {
 }
 
 async function marquer(id, s) {
+  if (!peutAppel()) return erreur('Lecture seule : vous ne pouvez pas faire l\'appel de cette classe.');
   const avant = REC[id];
   const motif = s === 'P' ? null : ((avant || {}).n || null);
   REC[id] = { s, n: motif || '' }; appel();
@@ -216,6 +235,7 @@ async function marquer(id, s) {
   } else erreur('');
 }
 async function note(id) {
+  if (!peutAppel()) return erreur('Lecture seule : vous ne pouvez pas modifier cette classe.');
   const cur = (REC[id] || {}).n || '';
   const n = prompt('Motif / remarque :', cur); if (n === null) return;
   const { error } = await sb.from('presences').update({ motif: n.trim() || null })
@@ -224,6 +244,7 @@ async function note(id) {
   REC[id].n = n.trim(); appel();
 }
 async function tous() {
+  if (!peutAppel()) return erreur('Lecture seule : vous ne pouvez pas faire l\'appel de cette classe.');
   if (!ELEVES.length) return;
   const rows = ELEVES.filter(e => !REC[e.id]).map(e => ({
     etablissement_id: $('etab').value, classe_id: cid(), inscription_id: e.id,
@@ -236,6 +257,9 @@ async function tous() {
 }
 
 function appel() {
+  const ok = peutAppel();
+  $('ro').style.display = ok ? 'none' : 'block';
+  $('btous').style.display = ok ? '' : 'none';
   const list = ELEVES, c = { P: 0, A: 0, R: 0, E: 0 };
   list.forEach(e => { const s = (REC[e.id] || {}).s; if (s) c[s]++; });
   const non = list.length - c.P - c.A - c.R - c.E;
@@ -244,12 +268,15 @@ function appel() {
   $('liste').innerHTML = list.length ? list.map(e => {
     const r = REC[e.id] || {}, s = r.s, tel = TEL[e.id];
     const msg = 'Bonjour, ' + nom(e) + ' est ' + (s === 'A' ? 'absent(e)' : s === 'R' ? 'en retard' : 'excusé(e)') + ' aujourd\'hui.';
+    const actions = ok
+      ? `<div class="st">${STAT.map(([k, l]) => `<button class="${k} ${s === k ? 'on' : ''}" data-m="${k}" data-id="${esc(e.id)}">${l}</button>`).join('')}</div>
+      ${s && s !== 'P' ? `<div class="liens"><span data-n="${esc(e.id)}">📝 Motif</span>
+        ${tel ? `<a href="tel:${esc(tel)}">📞 Parent</a><a href="sms:${esc(tel)}?body=${encodeURIComponent(msg)}">💬 SMS</a>` : ''}</div>` : ''}`
+      : `<span class="badge ${s || ''}">${s ? LIBS[s] : 'Non marqué'}</span>`;
     return `<div class="card"><div class="el">
       ${e.photo ? `<img src="${esc(e.photo)}" alt="">` : `<div class="av">${esc((e.prenom || e.nom || '?')[0].toUpperCase())}</div>`}
       <div class="info"><b>${esc(nom(e))}</b><small>${esc(e.matricule)}</small>${r.n ? `<small>📝 ${esc(r.n)}</small>` : ''}</div></div>
-      <div class="st">${STAT.map(([k, l]) => `<button class="${k} ${s === k ? 'on' : ''}" data-m="${k}" data-id="${esc(e.id)}">${l}</button>`).join('')}</div>
-      ${s && s !== 'P' ? `<div class="liens"><span data-n="${esc(e.id)}">📝 Motif</span>
-        ${tel ? `<a href="tel:${esc(tel)}">📞 Parent</a><a href="sms:${esc(tel)}?body=${encodeURIComponent(msg)}">💬 SMS</a>` : ''}</div>` : ''}
+      ${actions}
     </div>`;
   }).join('') : '<p style="text-align:center;opacity:.6">Aucun élève dans cette classe</p>';
 }
