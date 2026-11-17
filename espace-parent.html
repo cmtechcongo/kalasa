@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KALASA — Espace parent</title>
+<link rel="stylesheet" href="kalasa.css">
+<style>
+/* Styles propres à cette page uniquement */
+body{margin:0}
+main{max-width:900px;margin:0 auto;padding:12px}
+.ph{position:sticky;top:0;z-index:20;display:flex;gap:8px;align-items:center;padding:10px 12px;
+  padding-top:max(10px,env(safe-area-inset-top));background:var(--c,#fff);color:var(--t,#1b2430);
+  border-bottom:1px solid #8883;box-shadow:0 1px 4px #0002}
+.ph .logo{font-weight:700;white-space:nowrap}
+.ph select{flex:1;min-width:0;min-height:44px;padding:8px;font-size:.95rem;margin:0}
+.pbtn{flex:none;min-width:44px;min-height:44px;padding:0 10px;border:0;border-radius:10px;background:#dc2626;color:#fff;font-weight:600;cursor:pointer}
+.onglets{display:flex;gap:6px;margin-bottom:10px}
+.onglets button{flex:1;min-height:44px;border:0;border-radius:10px;background:#8882;color:inherit;font-weight:600;cursor:pointer}
+.onglets button.on{background:#16a34a;color:#fff}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+.kpi .k{background:#8881;border:1px solid #8833;border-radius:14px;padding:14px}
+.kpi small{display:block;opacity:.7;margin-bottom:4px}
+.kpi b{font-size:1.35rem}
+.kpi .sub{display:block;font-size:.78rem;opacity:.75;margin-top:4px}
+.bar{height:10px;background:#8883;border-radius:5px;margin:6px 0 2px}.bar i{display:block;height:10px;border-radius:5px;background:#16a34a}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:9px 6px;text-align:left;border-bottom:1px solid #8883;white-space:nowrap}
+th:nth-child(n+3),td:nth-child(n+3){text-align:right}
+tr.cl{cursor:pointer}tr.cl:hover{background:#8881}
+.st{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.72rem;font-weight:600;color:#fff}
+.st.ok{background:#16a34a}.st.ko{background:#dc2626}.st.nd{background:#8887}
+.an{display:flex;gap:8px;align-items:center;margin-bottom:10px}.an label{margin:0;white-space:nowrap}.an select{margin:0;flex:1}
+iframe{width:100%;height:700px;border:0;border-radius:14px;background:transparent;display:block}
+.err{background:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;font-size:.88rem}
+.v{opacity:.7}
+</style></head><body>
+<div class="ph">
+  <span class="logo">🎓 KALASA</span>
+  <select id="selEnfant" aria-label="Choisir un enfant"><option value="">Chargement…</option></select>
+  <button type="button" class="pbtn" id="btnOut" title="Se déconnecter">🚪 <span class="txt">Quitter</span></button>
+</div>
+<main>
+  <div id="msg" class="card"><p class="v">Chargement…</p></div>
+  <div id="corps" hidden>
+    <div class="an"><label for="selAnnee">📅 Année scolaire</label><select id="selAnnee"></select></div>
+    <div class="onglets">
+      <button type="button" id="tabDash" class="on">📊 Tableau de bord</button>
+      <button type="button" id="tabEnf">🧒 Espace de l'enfant</button>
+    </div>
+
+    <section id="vDash">
+      <div class="kpi">
+        <div class="k"><small>Enfants inscrits</small><b id="kNb">0</b><span class="sub" id="kSexe"></span></div>
+        <div class="k"><small>Total à payer</small><b id="kTot">0</b></div>
+        <div class="k"><small>Déjà payé</small><b id="kPaye" style="color:#16a34a">0</b></div>
+        <div class="k"><small>Reste à payer</small><b id="kReste" style="color:#dc2626">0</b></div>
+      </div>
+      <div class="card">
+        <small class="v">Avancement des paiements (tous les enfants)</small>
+        <div class="bar"><i id="kBar" style="width:0"></i></div>
+        <small class="v" id="kPct"></small>
+      </div>
+      <div class="card">
+        <h2>Détail par enfant</h2>
+        <div class="tw"><table>
+          <thead><tr><th>Élève</th><th>Classe</th><th>À payer</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+        <small class="v">Touchez une ligne pour ouvrir l'espace de l'enfant.</small>
+      </div>
+    </section>
+
+    <section id="vEnf" hidden>
+      <iframe id="frame" title="Espace de l'enfant"></iframe>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import { sb, exigerSession, deconnexion } from './kalasa-db.js';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const erreur = (m, e) => { $('msg').innerHTML = '<div class="err"><b>⚠ ' + esc(m) + '</b>' + (e && e.message ? '<br><small>' + esc(e.message) + '</small>' : '') + '</div>'; if (e) console.error(e); };
+const DEV = localStorage.getItem('kalasa_devise') || 'USD';
+const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
+const nomEl = e => [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ');
+
+$('btnOut').addEventListener('click', () => deconnexion());
+
+let INS = [], CLASSES = {}, ANNEES = [], FRAIS = [], PAIE = [], ANNEE = '', LIGNES = [];
+
+try {
+  await exigerSession(['parent']);
+
+  const rl = await sb.from('parent_eleves').select('inscription_id');
+  if (rl.error) throw rl.error;
+  const ids = (rl.data || []).map(x => x.inscription_id);
+  if (!ids.length) { $('msg').innerHTML = '<p class="v">Aucun enfant n\'est encore lié à votre compte. Contactez le secrétariat de l\'école.</p>'; throw 'stop'; }
+
+  const [ri, rc, ra, rf, rp] = await Promise.all([
+    sb.from('inscriptions').select('id, matricule, nom, postnom, prenom, sexe, classe_id, annee_id, etablissement_id').in('id', ids),
+    sb.from('classes').select('id, nom, option_faculte'),
+    sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
+    sb.from('frais').select('id, etablissement_id, annee_id, classe_id, lib, montant'),
+    sb.from('paiements').select('inscription_id, montant').in('inscription_id', ids)
+  ]);
+  const err = [ri, rc, ra, rf, rp].find(r => r.error);
+  if (err) throw err.error;
+
+  INS = ri.data || [];
+  (rc.data || []).forEach(c => CLASSES[c.id] = c.nom + (c.option_faculte ? ' · ' + c.option_faculte : ''));
+  ANNEES = (ra.data || []).filter(a => INS.some(i => i.annee_id === a.id));
+  FRAIS = rf.data || [];
+  PAIE = rp.data || [];
+
+  if (!ANNEES.length) { $('msg').innerHTML = '<p class="v">Aucune inscription trouvée pour vos enfants.</p>'; throw 'stop'; }
+
+  ANNEE = (ANNEES.find(a => a.active) || ANNEES[0]).id;
+  $('selAnnee').innerHTML = ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
+  $('selAnnee').value = ANNEE;
+  $('selAnnee').addEventListener('change', () => { ANNEE = $('selAnnee').value; rendre(); });
+
+  $('msg').hidden = true; $('corps').hidden = false;
+  rendre();
+} catch (e) {
+  if (e !== 'stop') erreur('Impossible de charger votre espace', e);
+}
+
+function calculer() {
+  return INS.filter(i => i.annee_id === ANNEE).map(i => {
+    const du = FRAIS.filter(f => f.etablissement_id === i.etablissement_id && f.annee_id === i.annee_id && (!f.classe_id || f.classe_id === i.classe_id))
+      .reduce((s, f) => s + +f.montant, 0);
+    const paye = PAIE.filter(p => p.inscription_id === i.id).reduce((s, p) => s + +p.montant, 0);
+    return { id: i.id, nom: nomEl(i), sexe: String(i.sexe || '').toUpperCase().charAt(0), classe: CLASSES[i.classe_id] || '—', du, paye, reste: Math.max(0, du - paye) };
+  }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
+
+function rendre() {
+  LIGNES = calculer();
+  const sum = k => LIGNES.reduce((s, l) => s + l[k], 0);
+  const g = LIGNES.filter(l => l.sexe === 'M').length, f = LIGNES.filter(l => l.sexe === 'F').length;
+  $('kNb').textContent = LIGNES.length;
+  $('kSexe').textContent = (g || f) ? (g + ' garçon(s) · ' + f + ' fille(s)') : '';
+  $('kTot').textContent = fmt(sum('du'));
+  $('kPaye').textContent = fmt(sum('paye'));
+  $('kReste').textContent = fmt(sum('reste'));
+  const pct = sum('du') ? Math.min(100, Math.round(sum('paye') / sum('du') * 100)) : 0;
+  $('kBar').style.width = pct + '%';
+  $('kPct').textContent = sum('du') ? pct + ' % payé' : 'Aucun frais défini pour cette année';
+
+  $('tbody').innerHTML = LIGNES.length ? LIGNES.map(l => {
+    const st = !l.du ? '<span class="st nd">Aucun frais</span>' : l.reste <= 0 ? '<span class="st ok">Soldé</span>' : '<span class="st ko">Non soldé</span>';
+    return `<tr class="cl" data-id="${esc(l.id)}"><td>${esc(l.nom)}</td><td>${esc(l.classe)}</td><td>${fmt(l.du)}</td><td>${fmt(l.paye)}</td><td>${fmt(l.reste)}</td><td>${st}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="v">Aucun enfant inscrit pour cette année.</td></tr>';
+
+  $('selEnfant').innerHTML = '<option value="">— Choisir un enfant —</option>' +
+    LIGNES.map(l => `<option value="${esc(l.id)}">${esc(l.nom)}</option>`).join('');
+  montrer('dash');
+}
+
+function montrer(v) {
+  $('vDash').hidden = v !== 'dash'; $('vEnf').hidden = v !== 'enf';
+  $('tabDash').classList.toggle('on', v === 'dash'); $('tabEnf').classList.toggle('on', v === 'enf');
+}
+
+function ouvrir(id) {
+  if (!id || !LIGNES.some(l => l.id === id)) return;
+  $('selEnfant').value = id;
+  $('frame').src = 'espace-eleve.html?integre=1&eleve=' + encodeURIComponent(id);
+  montrer('enf');
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+$('selEnfant').addEventListener('change', () => $('selEnfant').value ? ouvrir($('selEnfant').value) : montrer('dash'));
+$('tbody').addEventListener('click', e => { const tr = e.target.closest('tr.cl'); if (tr) ouvrir(tr.dataset.id); });
+$('tabDash').addEventListener('click', () => montrer('dash'));
+$('tabEnf').addEventListener('click', () => {
+  const id = $('selEnfant').value || (LIGNES[0] && LIGNES[0].id);
+  if (id) ouvrir(id);
+});
+addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.kalasa !== 'hauteur') return;
+  $('frame').style.height = Math.max(400, e.data.h + 16) + 'px';
+});
+</script>
+</body></html>
