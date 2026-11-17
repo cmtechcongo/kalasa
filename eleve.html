@@ -12,7 +12,14 @@ input[readonly]{opacity:.6}
 .el img,.av{width:52px;height:52px}
 .msg{background:#16a34a;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;display:none;text-align:center}
 .warn{word-break:break-word}
-</style></head>
+.lc{overflow-x:auto}
+.lc table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:8px}
+.lc th,.lc td{padding:6px 4px;text-align:left;border-bottom:1px solid #8883}
+.lc th:first-child,.lc td:first-child{width:34px;text-align:right}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head>
 
 <body>
 <header>🎓 KALASA</header>
@@ -56,6 +63,17 @@ input[readonly]{opacity:.6}
 </form>
 
 <div class="card">
+  <h2>📋 Liste par classe</h2>
+  <label>Classe</label><select id="lcl"></select>
+  <p id="lcInfo" style="margin:10px 0 0;font-size:.9rem"></p>
+  <div class="acts" id="actsPdf" style="display:none">
+    <button type="button" id="bpdf">📄 Télécharger PDF</button>
+    <button type="button" class="sec" id="bprint">🖨 Imprimer</button>
+  </div>
+  <div class="lc" id="lcListe"></div>
+</div>
+
+<div class="card">
   <h2>Élèves inscrits (<span id="total">0</span>)</h2>
   <label>Année</label><select id="filtre"></select>
   <label>Recherche</label><input id="q" type="search" placeholder="🔍 Nom, matricule, classe…">
@@ -73,10 +91,11 @@ const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nul = v => { v = String(v ?? '').trim(); return v === '' ? null : v; };
 
-let ETABS = [], ANNEES = [], CLASSES = [], L = [], eid = null, photo = '';
+let ETABS = [], ANNEES = [], CLASSES = [], L = [], LC = [], eid = null, photo = '';
 const nE = id => (ETABS.find(x => x.id === id) || {}).nom || '—';
 const nA = id => (ANNEES.find(x => x.id === id) || {}).lib || '—';
 const cl = id => CLASSES.find(x => x.id === id) || {};
+const fmtD = d => d ? String(d).split('-').reverse().join('/') : '';
 const erreur = t => { const w = $('warn'); w.innerHTML = t; w.style.display = t ? 'block' : 'none'; };
 function notifier(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 2000); }
 
@@ -88,7 +107,7 @@ function anneeDefaut() {
 
 async function init() {
   const [re, ra, rc] = await Promise.all([
-    sb.from('etablissements').select('id, nom').order('nom'),
+    sb.from('etablissements').select('id, nom, adresse, telephone').order('nom'),
     sb.from('annees_scolaires').select('id, lib, debut, active').order('debut', { ascending: false }),
     sb.from('classes').select('id, etablissement_id, annee_id, nom, option_faculte')
   ]);
@@ -110,7 +129,7 @@ async function init() {
   $('filtre').innerHTML = '<option value="">Toutes les années</option>' + ANNEES.map(a => `<option value="${esc(a.id)}">${esc(a.lib)}</option>`).join('');
   $('filtre').value = ad;
   if (!GERE) $('f').style.display = 'none';
-  majClasses(); apercu();
+  majClasses(); majListeClasses(); apercu();
   await charger();
 }
 
@@ -161,6 +180,7 @@ async function charger() {
   if (error) { erreur('Lecture impossible : ' + esc(error.message)); L = []; }
   else L = data || [];
   rendu();
+  await chargerLC();       // la liste de la classe choisie reste à jour après chaque ajout, modification ou suppression
 }
 
 /* Matricule : année (4 premiers caractères du libellé) + compteur, par établissement et par année */
@@ -264,15 +284,115 @@ function exporter() {
   a.download = 'eleves_kalasa.csv'; a.click();
 }
 
+/* ===== Liste par classe : affichage, PDF, impression ===== */
+const classeLC = () => CLASSES.find(x => x.id === $('lcl').value) || null;
+const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
+const titreClasse = c => c.nom + (c.option_faculte ? ' · ' + c.option_faculte : '');
+const etabDe = c => ETABS.find(x => x.id === c.etablissement_id) || {};
+const trie = () => [...LC].sort((a, b) => nomDe(a).localeCompare(nomDe(b), 'fr'));
+const effectifs = t => ({ n: t.length, g: t.filter(x => x.sexe === 'M').length, f: t.filter(x => x.sexe === 'F').length });
+/* Nom par défaut : « Liste des élèves de <classe> <année scolaire> » */
+const nomFichier = c => ('Liste des élèves de ' + c.nom + (c.option_faculte ? ' ' + c.option_faculte : '') + ' ' + nA(c.annee_id))
+  .replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+
+function majListeClasses() {
+  const e = $('etab').value, a = $('filtre').value, cur = $('lcl').value;
+  const l = CLASSES.filter(c => c.etablissement_id === e && (!a || c.annee_id === a))
+    .sort((x, y) => String(x.nom).localeCompare(String(y.nom), 'fr', { numeric: true }));
+  $('lcl').innerHTML = '<option value="">— Choisir une classe —</option>' +
+    l.map(c => `<option value="${esc(c.id)}">${esc(titreClasse(c) + (a ? '' : ' — ' + nA(c.annee_id)))}</option>`).join('');
+  if (l.some(c => c.id === cur)) $('lcl').value = cur;
+  else { $('lcl').value = ''; LC = []; rendLC(); }
+}
+async function chargerLC() {
+  const id = $('lcl').value;
+  if (!id) { LC = []; rendLC(); return; }
+  const { data, error } = await sb.from('inscriptions')
+    .select('id, matricule, nom, postnom, prenom, sexe, date_naissance').eq('classe_id', id).order('nom');
+  if (error) { erreur('Lecture de la classe impossible : ' + esc(error.message)); LC = []; }
+  else LC = data || [];
+  rendLC();
+}
+function rendLC() {
+  const c = classeLC();
+  $('actsPdf').style.display = c && LC.length ? 'flex' : 'none';
+  if (!c) { $('lcInfo').textContent = 'Choisissez une classe pour afficher sa liste.'; $('lcListe').innerHTML = ''; return; }
+  const t = trie(), e = effectifs(t);
+  $('lcInfo').innerHTML = `<b>${esc(titreClasse(c))}</b> · ${esc(nA(c.annee_id))} — Effectif : <b>${e.n}</b> (${e.g} garçons, ${e.f} filles)`;
+  $('lcListe').innerHTML = t.length
+    ? '<table><tr><th>N°</th><th>Matricule</th><th>Nom complet</th><th>Sexe</th></tr>' +
+      t.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.matricule)}</td><td>${esc(nomDe(x))}</td><td>${x.sexe === 'M' ? 'M' : 'F'}</td></tr>`).join('') + '</table>'
+    : '<p style="text-align:center;opacity:.6">Aucun élève dans cette classe</p>';
+}
+
+function telechargerPdf() {
+  const c = classeLC(); if (!c || !LC.length) return;
+  if (!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable))
+    return alert('PDF indisponible : connexion Internet requise pour charger le générateur PDF.');
+  const t = trie(), ef = effectifs(t), e = etabDe(c);
+  const d = new window.jspdf.jsPDF();
+  const W = d.internal.pageSize.getWidth(), H = d.internal.pageSize.getHeight();
+  // En-tête : établissement, adresse, titre du document
+  d.setFont(undefined, 'bold'); d.setFontSize(17);
+  d.text(String(e.nom || '').toUpperCase(), W / 2, 16, { align: 'center' });
+  d.setFont(undefined, 'normal'); d.setFontSize(10);
+  d.text(String(e.adresse || '') + (e.telephone ? ' · Tél : ' + e.telephone : ''), W / 2, 22, { align: 'center' });
+  d.setLineWidth(0.6); d.line(14, 26, W - 14, 26);
+  d.setFont(undefined, 'bold'); d.setFontSize(13);
+  d.text(('Liste des élèves de la classe ' + titreClasse(c)).toUpperCase(), W / 2, 34, { align: 'center' });
+  d.setFont(undefined, 'normal'); d.setFontSize(10);
+  d.text('Année scolaire ' + nA(c.annee_id) + ' — Effectif : ' + ef.n + ' (' + ef.g + ' garçons, ' + ef.f + ' filles)', W / 2, 40, { align: 'center' });
+  const date = new Date().toLocaleDateString('fr-FR');
+  d.autoTable({
+    head: [['N°', 'Matricule', 'Nom complet', 'Sexe', 'Date de naissance']],
+    body: t.map((x, i) => [i + 1, x.matricule, nomDe(x), x.sexe === 'M' ? 'M' : 'F', fmtD(x.date_naissance)]),
+    startY: 46, styles: { fontSize: 9 }, headStyles: { fillColor: [37, 99, 235] },
+    columnStyles: { 0: { cellWidth: 12, halign: 'right' }, 3: { cellWidth: 16, halign: 'center' } },
+    didDrawPage: () => {
+      d.setFontSize(8); d.setFont(undefined, 'normal');
+      d.text('Établi le ' + date + ' par ' + (C.nom_complet || ''), 14, H - 8);
+      d.text('Page ' + d.internal.getNumberOfPages(), W - 14, H - 8, { align: 'right' });
+    }
+  });
+  d.save(nomFichier(c) + '.pdf');
+}
+
+function imprimerListe() {
+  const c = classeLC(); if (!c || !LC.length) return;
+  const t = trie(), ef = effectifs(t), e = etabDe(c);
+  const w = window.open('', '_blank');
+  if (!w) return alert('Autorisez les fenêtres pop-up pour imprimer.');
+  w.document.write(`<html><head><meta charset="utf-8"><title>${esc(nomFichier(c))}</title>
+  <style>body{font-family:sans-serif;padding:16px;color:#000}
+  .en{text-align:center;border-bottom:3px double #000;padding-bottom:10px;margin-bottom:14px}
+  .n{font-size:22px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+  .t{font-size:17px;font-weight:700;margin-top:10px;text-transform:uppercase}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:5px 7px;font-size:12px;text-align:left}
+  th{background:#eee}td:first-child,th:first-child{width:32px;text-align:right}
+  .pied{margin-top:14px;font-size:11px}</style></head><body>
+  <div class="en"><div class="n">${esc(e.nom || '')}</div>
+  <div>${esc(e.adresse || '')}${e.telephone ? ' · Tél : ' + esc(e.telephone) : ''}</div>
+  <div class="t">Liste des élèves de la classe ${esc(titreClasse(c))}</div>
+  <div>Année scolaire ${esc(nA(c.annee_id))} — Effectif : ${ef.n} (${ef.g} garçons, ${ef.f} filles)</div></div>
+  <table><tr><th>N°</th><th>Matricule</th><th>Nom complet</th><th>Sexe</th><th>Date de naissance</th></tr>
+  ${t.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.matricule)}</td><td>${esc(nomDe(x))}</td><td>${x.sexe === 'M' ? 'M' : 'F'}</td><td>${esc(fmtD(x.date_naissance))}</td></tr>`).join('')}</table>
+  <div class="pied">Établi le ${new Date().toLocaleDateString('fr-FR')} par ${esc(C.nom_complet || '')}</div>
+  <script>onload=()=>setTimeout(print,400)<\/script></body></html>`);
+  w.document.close();
+}
+
 $('f').addEventListener('submit', enregistrer);
 $('ann').addEventListener('click', reinit);
 $('bphoto').addEventListener('click', () => $('fichier').click());
 $('fichier').addEventListener('change', e => choisirPhoto(e.target));
 $('naiss').addEventListener('change', majAge);
 $('classe').addEventListener('change', majOption);
-$('etab').addEventListener('change', () => { majClasses(); if (!eid) charger(); });
+$('etab').addEventListener('change', () => { majClasses(); majListeClasses(); if (!eid) charger(); });
 $('annee').addEventListener('change', majClasses);
-$('filtre').addEventListener('change', charger);
+$('filtre').addEventListener('change', () => { majListeClasses(); charger(); });
+$('lcl').addEventListener('change', chargerLC);
+$('bpdf').addEventListener('click', telechargerPdf);
+$('bprint').addEventListener('click', imprimerListe);
 $('q').addEventListener('input', rendu);
 $('bexp').addEventListener('click', exporter);
 $('liste').addEventListener('click', e => {
