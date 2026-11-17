@@ -14,7 +14,8 @@ export const ACCUEIL = {
   enseignant: 'index.html',
   caissier: 'index.html',
   eleve: 'espace-eleve.html',
-  surveillant: 'presence.html'
+  surveillant: 'presence.html',
+  parent: 'espace-parent.html'
 
 };
 
