@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>KALASA — Espace parent</title>
+<style>
+:root{--m:#2563eb;--bg:#f5f7fb;--c:#fff;--t:#1b2430}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1520;--c:#18212f;--t:#e8edf5}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;
+padding:24px 14px calc(24px + env(safe-area-inset-bottom,0px));font-family:system-ui,sans-serif;background:var(--bg);color:var(--t)}
+.logo{text-align:center}.logo span{font-size:2.6rem}.logo h1{margin:2px 0 0;letter-spacing:.12em;font-size:1.5rem}
+.box{width:100%;max-width:420px;background:var(--c);border-radius:16px;padding:18px;box-shadow:0 4px 16px #0002}
+label{display:block;font-size:.8rem;margin:11px 0 4px;opacity:.8}
+input{width:100%;padding:12px;border:1px solid #8885;border-radius:10px;font-size:1rem;background:transparent;color:inherit}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.go{width:100%;margin-top:14px;padding:14px;border:0;border-radius:10px;background:var(--m);color:#fff;font-size:1.02rem;font-weight:600;cursor:pointer}
+.go:disabled{opacity:.55}
+.sec{width:100%;margin-top:8px;padding:11px;border:1px dashed #8886;border-radius:10px;background:transparent;color:inherit;font-size:.92rem;cursor:pointer}
+.err{min-height:1.3em;margin:8px 0 0;color:#dc2626;font-size:.88rem;word-break:break-word}.ok{color:#16a34a;font-size:.92rem;margin:8px 0 0}
+.sub{margin:0 0 4px;font-size:.85rem;opacity:.75}a{color:inherit}
+fieldset{border:0;margin:0;padding:0;min-width:0}fieldset:disabled{opacity:.45}
+.etape{margin:16px 0 0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.enf{border:1px solid #8884;border-radius:12px;padding:10px;margin-top:10px}
+.enf b{font-size:.85rem}.enf .x{float:right;border:0;background:none;color:#dc2626;font-size:1rem;cursor:pointer}
+</style></head><body>
+<div class="logo"><span>👨‍👩‍👧</span><h1>KALASA</h1></div>
+<div class="box">
+<form id="f" autocomplete="off" novalidate onsubmit="return false">
+<p class="sub">Vous devez déjà être enregistré(e) comme parent ou tuteur par l'école. Créez votre compte et liez vos enfants déjà inscrits.</p>
+
+<p class="etape">Étape 1 — Votre fiche parent</p>
+<label>Votre nom complet * <small>(comme enregistré par l'école)</small></label><input id="nom" autocomplete="off">
+<label>Votre téléphone * <small>(celui donné à l'école)</small></label><input id="tel" type="tel" autocomplete="off">
+<p class="err" id="e1" role="alert"></p><p class="ok" id="s1"></p>
+
+<fieldset id="f2" disabled>
+<p class="etape">Étape 2 — Vos enfants</p>
+<p class="sub">Pour chaque enfant : matricule, nom de famille et date de naissance (comme pour son propre compte élève).</p>
+<div id="enfants"></div>
+<button type="button" class="sec" id="plus">+ Ajouter un enfant</button>
+
+<p class="etape">Étape 3 — Votre accès</p>
+<label>Choisissez un identifiant *</label><input id="login" autocapitalize="none" autocomplete="username" placeholder="ex : papa.kasongo">
+<label>Mot de passe * (10 caractères min.)</label><input id="m1" type="password" autocomplete="new-password">
+<label>Confirmer le mot de passe *</label><input id="m2" type="password" autocomplete="new-password">
+<p class="err" id="e2" role="alert"></p>
+<button class="go" id="ba" type="button">Créer mon compte parent</button>
+</fieldset>
+</form>
+</div>
+<p style="font-size:.85rem"><a href="login.html">← Retour à la connexion</a></p>
+
+<script type="module">
+const FONCTION = 'activer-parent';
+const $ = i => document.getElementById(i);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+let K;
+try { K = await import('./kalasa-db.js'); }
+catch (e) { $('e1').textContent = 'Erreur de chargement de kalasa-db.js : ' + e.message; throw e; }
+const { SUPABASE_URL, SUPABASE_KEY, sb, emailPour, ouvrirSession, garder, ACCUEIL } = K;
+
+async function appeler(corps) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/${FONCTION}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify(corps)
+    });
+    let j = {}; try { j = await r.json(); } catch {}
+    const message = j.message || (r.status === 401 ? 'Service non autorisé : désactivez « Verify JWT » sur la fonction activer-parent.' : r.status === 404 ? 'Service introuvable : vérifiez le nom de la fonction activer-parent.' : r.ok ? '' : 'Erreur ' + r.status);
+    return { ...j, ok: r.ok && j.success !== false, status: r.status, message };
+  } catch { return { ok: false, status: 0, message: 'Connexion impossible : vérifiez votre connexion Internet.' }; }
+}
+
+const e1 = $('e1'), s1 = $('s1'), e2 = $('e2'), f2 = $('f2');
+let derniere = '', enCours = false;
+const cleSaisie = () => [$('nom').value.trim().toLowerCase(), $('tel').value.replace(/\D/g, '')].join('|');
+const complet = () => $('nom').value.trim().length >= 2 && $('tel').value.replace(/\D/g, '').length >= 9;
+
+/* ----- Blocs enfants ----- */
+function ajouterEnfant() {
+  const n = document.querySelectorAll('.enf').length;
+  if (n >= 10) return;
+  const d = document.createElement('div'); d.className = 'enf';
+  d.innerHTML = `<b>Enfant ${n + 1}</b>${n ? '<button type="button" class="x" title="Retirer">✕</button>' : ''}
+<label>Matricule *</label><input class="em" autocapitalize="characters" autocomplete="off" placeholder="ex : 2025-0001">
+<div class="r2"><div><label>Nom de famille *</label><input class="en" autocomplete="off"></div>
+<div><label>Naissance *</label><input class="ed" type="date"></div></div>`;
+  $('enfants').appendChild(d);
+  const x = d.querySelector('.x');
+  if (x) x.onclick = () => { d.remove(); renum(); };
+  renum();
+}
+function renum() {
+  document.querySelectorAll('.enf').forEach((d, i) => d.querySelector('b').textContent = 'Enfant ' + (i + 1));
+  $('plus').disabled = document.querySelectorAll('.enf').length >= 10;
+}
+$('plus').onclick = ajouterEnfant;
+
+function verrouiller() {
+  f2.disabled = true; e1.textContent = ''; s1.textContent = ''; e2.textContent = ''; derniere = '';
+}
+['nom', 'tel'].forEach(id => $(id).addEventListener('input', verrouiller));
+
+async function verifier() {
+  if (!complet() || enCours) return;
+  const k = cleSaisie(); if (k === derniere) return;
+  enCours = true; e1.textContent = ''; s1.textContent = '⏳ Vérification…';
+  const r = await appeler({ action: 'verifier', nom: $('nom').value.trim(), telephone: $('tel').value.trim() });
+  enCours = false; s1.textContent = '';
+  if (!r.ok) { e1.textContent = r.message; return; }
+  derniere = k; f2.disabled = false;
+  if (!document.querySelector('.enf')) ajouterEnfant();
+  s1.textContent = '✅ Fiche trouvée' + (r.nb_enfants ? ' (' + r.nb_enfants + ' enfant(s) déjà lié(s) par l\'école)' : '') + '. Indiquez au moins un de vos enfants pour confirmer votre identité.';
+}
+['nom', 'tel'].forEach(id => $(id).addEventListener('change', verifier));
+
+/* ----- Création du compte ----- */
+async function activer() {
+  const btn = $('ba'); e2.textContent = '';
+  const enfants = [...document.querySelectorAll('.enf')].map(d => ({
+    matricule: d.querySelector('.em').value.trim(), nom: d.querySelector('.en').value.trim(), naissance: d.querySelector('.ed').value
+  }));
+  if (!enfants.length || enfants.some(x => !x.matricule || !x.nom || !x.naissance)) { e2.textContent = 'Remplissez le matricule, le nom de famille et la date de naissance de chaque enfant.'; return; }
+  const login = $('login').value.trim();
+  if (login.length < 3) { e2.textContent = 'L\'identifiant doit contenir au moins 3 caractères.'; return; }
+  if ($('m1').value.length < 10) { e2.textContent = 'Le mot de passe doit contenir au moins 10 caractères.'; return; }
+  if ($('m1').value !== $('m2').value) { e2.textContent = 'La confirmation ne correspond pas.'; return; }
+  btn.disabled = true; btn.textContent = 'Création…';
+  try {
+    const r = await appeler({
+      action: 'activer', nom: $('nom').value.trim(), telephone: $('tel').value.trim(),
+      enfants, identifiant: login, mot_de_passe: $('m1').value
+    });
+    if (!r.ok) throw new Error(r.message);
+    try {
+      const email = await emailPour(login);
+      const { error } = await sb.auth.signInWithPassword({ email, password: $('m1').value });
+      if (error) throw error;
+      const p = await ouvrirSession();
+      if (!p || !p.actif) throw new Error('profil');
+      const duree = 12 * 3600e3;
+      garder({ ...p, etabId: p.etablissements[0] ? p.etablissements[0].id : null, duree, exp: Date.now() + duree });
+      location.replace(ACCUEIL[p.role] || 'index.html');
+    } catch {
+      s1.textContent = '✅ Compte créé. Connectez-vous avec votre identifiant.';
+      setTimeout(() => location.replace('login.html'), 1500);
+    }
+  } catch (x) { e2.textContent = x.message; btn.disabled = false; btn.textContent = 'Créer mon compte parent'; }
+}
+$('ba').addEventListener('click', activer);
+</script>
+</body></html>
