@@ -1,9 +1,12 @@
 /* ============================================================
    BULLETIN-MODELE.JS
-   Bulletins officiels RDC (humanités pédagogiques)
-   Modèles : IGE-010 (1ère) · IGE-011 (2ème) · IGE-012 (3ème) · IGE-013 (4ème)
+   Bulletins officiels RDC
+   Modèles : IGE-004 (Élémentaire 1ère/2e année) · IGE-010 (1ère HP) · IGE-011 (2ème HP)
+             IGE-012 (3ème HP) · IGE-013 (4ème HP)
    Le modèle utilisé dépend du champ "modeleBulletin" de la classe
    (choisi dans classe.html : la liste se remplit toute seule).
+   Toutes les classes d'un même niveau (1ère A, 1ère B, 1ère C…) choisissent
+   le même modèle : le bulletin se remplit avec les notes de chaque élève.
    Dépendances : aucune (autonome)
    Usage :
      BULLETIN.estDisponible(classe) -> true/false
@@ -234,6 +237,62 @@
     }
   ];
 
+  /* ---------- Modèle IGE-004 (Degré élémentaire · 1ère et 2e année) ----------
+     Ce bulletin est par TRIMESTRE (3 trimestres), avec des domaines, des
+     sous-groupes et des sous-totaux : il a donc une « structure » (liste de
+     lignes dans l'ordre du papier) au lieu de groupes de maxima.
+       { dm: 'TITRE' }        → ligne de domaine
+       { gr: 'TITRE' }        → ligne de sous-groupe (fond gris)
+       { st: 'Sous-total' }   → somme des matières depuis le dernier dm/st
+       { nom, re, max:{p,ex} } → une matière (p = max par période, ex = max examen)
+         sup:true → « (1) » après le nom ; tall:true → ligne haute en gras
+     Une matière KALASA n'est utilisée qu'une seule fois (de haut en bas).
+     Astuce de nommage dans KALASA pour les deux « Expression orale » :
+       « Langues congolaises – Expression orale » et « Français – Expression orale ». */
+  const CONGO = '(congol|nationale|lingala|swahili|kikongo|tshiluba)';
+  const STRUCTURE_004 = [
+    { dm: 'DOMAINE DES LANGUES' },
+    { gr: 'LANGUES CONGOLAISES' },
+    { nom: 'Expression Orale', re: new RegExp(CONGO + '.*\\borale|\\borale.*' + CONGO, 'i'), max: { p: 20, ex: 40 } },
+    { nom: 'Expression Ecrite', re: /[ée]crite/i, max: { p: 20, ex: 40 } },
+    { st: 'Sous-total' },
+    { gr: 'FRANÇAIS' },
+    { nom: 'Vocabulaire', re: /vocabulaire/i, max: { p: 10, ex: 20 } },
+    { nom: 'Expression Orale', re: new RegExp('^(?!.*' + CONGO + ').*\\borale', 'i'), max: { p: 20, ex: 40 } },
+    { st: 'Sous-total' },
+    { nom: 'LECT. – ECRITURE EN LANGUES CONGOLAISES', re: /lect/i, max: { p: 30, ex: 60 }, tall: true },
+
+    { dm: 'DOMAINE DES MATHEMATIQUES, SCIENCES ET TECHNOLOGIE' },
+    { gr: 'MATHEMATIQUES' },
+    { nom: 'Mesures des grandeurs', re: /mesure|grandeur/i, max: { p: 10, ex: 20 } },
+    { nom: 'Formes géométriques', re: /forme|g[ée]om[ée]tri/i, max: { p: 10, ex: 20 } },
+    { nom: 'Numération', re: /num[ée]ration/i, max: { p: 20, ex: 40 } },
+    { nom: 'Opérations', re: /op[ée]ration/i, max: { p: 20, ex: 40 } },
+    { nom: 'Problèmes', re: /probl[èe]me/i, max: { p: 20, ex: 40 } },
+    { gr: 'SCIENCES' },
+    { nom: 'Sciences d’éveil', re: /science|[ée]veil/i, max: { p: 20, ex: 40 } },
+    { gr: 'TECHNOLOGIE' },
+    { nom: 'Technologie', re: /technolog/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-total' },
+
+    { dm: 'DOMAINE DE L’UNIVERS SOCIAL ET ENVIRONNEMENT' },
+    { nom: 'Ed. Civ. & Morale', re: /civ|morale/i, max: { p: 10, ex: 20 } },
+    { nom: 'Ed. Santé & Env.', re: /sant[ée]|environ|\benv\b/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-total' },
+
+    { dm: 'DOMAINE DES ARTS' },
+    { gr: 'EDUCATION ARTISTIQUE' },
+    { nom: 'Arts plastiques', re: /plastique/i, max: { p: 10, ex: 20 } },
+    { nom: 'Arts dramatiques', re: /dramati|th[ée][âa]tr/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-total' },
+
+    { dm: 'DOMAINE DU DEVELOPPEMENT PERSONNEL' },
+    { nom: 'Ed. phys. & sportive', re: /phys|sport/i, max: { p: 10, ex: 20 } },
+    { nom: 'Init. Trav. Prod.', re: /init|trav.*prod|productif/i, max: { p: 10, ex: 20 } },
+    { nom: 'Religion', re: /relig/i, max: { p: 10, ex: 20 }, sup: true },
+    { st: 'Sous-total' }
+  ];
+
   /* ➕ ÉTAPE 1 (nouveau modèle) : copie un bloc ci-dessus, par exemple
      const GROUPES_014 = [ { max:{p:..,ex:..}, matieres:[ {nom:'…', re:/…/i}, … ] }, … ];
      puis passe à l'ÉTAPE 2 juste en dessous. */
@@ -260,6 +319,12 @@
        maxGeneraux  : { p, ex } valeurs imprimées sur le papier, si elles
                       diffèrent du calcul automatique (optionnel)
        groupes      : les groupes de l'ÉTAPE 1
+
+     Modèle par trimestres (type:'elementaire') : au lieu de groupes /
+     pLabels / rowH…, il utilise :
+       type      : 'elementaire'
+       periodes  : codes de notes KALASA par trimestre [[P1,P2,EX],[…],[…]]
+       structure : la STRUCTURE de l'ÉTAPE 1
      ============================================================ */
   const MODELES = {
     'IGE-010': {
@@ -320,6 +385,15 @@
       blkBas: false,
       maxGenDetail: true,
       groupes: GROUPES_013
+    },
+    'IGE-004': {
+      type: 'elementaire',
+      label: '1ère / 2e Élémentaire',
+      ref: 'IGE/P.S/004',
+      titre: 'BULLETIN DE L’ELEVE DEGRE ELEMENTAIRE (1<sup>ère</sup>, 2<sup>e</sup> ANNEE) (1)',
+      // Codes de notes KALASA : [période 1, période 2, examen] pour chaque trimestre
+      periodes: [['P1', 'P2', 'EX1'], ['P3', 'P4', 'EX2'], ['P5', 'P6', 'EX3']],
+      structure: STRUCTURE_004
     }
 
     /* ➕ ÉTAPE 2 (nouveau modèle) : ajoute une virgule après le bloc ci-dessus,
@@ -432,6 +506,26 @@
 .bulletin .note{padding:2px 14px 6px;font-size:9.5px;display:flex;justify-content:space-between;align-items:flex-end}
 .bulletin .note i{font-weight:bold}
 
+/* ---- Variante élémentaire (IGE/P.S/004) : 3 trimestres, domaines, sous-totaux ---- */
+.bulletin.elem{line-height:1.2}
+.bulletin.elem .info>div:last-child{justify-content:space-between;gap:0}
+.bulletin.elem .title{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:5px 14px}
+.bulletin.elem .title .a{display:inline-block;min-width:110px;border-bottom:1.5px dotted #000;height:12px;vertical-align:bottom}
+.bulletin.elem th,.bulletin.elem td{padding:0 2px;height:15px;font-size:9.5px}
+.bulletin.elem thead th{height:13px;font-size:8px;line-height:1.1;padding:0}
+.bulletin.elem thead th.br{font-size:11px;letter-spacing:3px}
+.bulletin.elem td.br{font-size:9.5px;text-align:left}
+.bulletin.elem tr.st td{font-weight:bold}
+.bulletin.elem tr.tall td{height:24px}
+.bulletin.elem tr.tall td.br{font-size:8.5px;white-space:normal;line-height:1.1}
+.bulletin.elem tr.gr td{background:#d5dae6;text-align:left;font-weight:bold;padding-left:4px}
+.bulletin.elem tr.dm td{text-align:center;font-weight:bold}
+.bulletin.elem tr.ht td.br{font-weight:bold;font-size:8px}
+.bulletin.elem td.hat{background:repeating-linear-gradient(90deg,#000 0 1.5px,#fff 1.5px 3px)!important}
+.bulletin.elem .ft{padding:6px 14px 2px;font-size:10.5px;display:flex;justify-content:space-between;align-items:flex-end}
+.bulletin.elem .ft .dl{display:inline-block;border-bottom:1px dotted #000;vertical-align:bottom;height:11px}
+.bulletin.elem .sg{padding:8px 30px 4px}
+
 .bulletin-overlay{position:fixed;inset:0;background:#e5e5e5;z-index:9999;display:none;overflow:auto;padding:12px}
 .bulletin-overlay.show{display:block}
 .bulletin-overlay .bo-bar{position:sticky;top:0;background:#fff;padding:8px;display:flex;gap:8px;border-radius:8px;margin-bottom:10px;box-shadow:0 2px 6px #0003;z-index:10}
@@ -458,6 +552,173 @@
     document.head.appendChild(st);
   }
 
+  /* ---------- Rendu « Degré élémentaire » (IGE/P.S/004) ---------- */
+  function renderElementaire(data, M) {
+    const {
+      eleve = {}, classe = {}, etab = {}, annee = '',
+      notes = {}, matieres = [], rang = '', nEleves = ''
+    } = data;
+    const PER = M.periodes;
+
+    // Associer chaque ligne du papier à une matière KALASA (utilisée une seule fois)
+    const used = new Set();
+    const items = M.structure.map(it => {
+      if (!it.nom) return it;
+      const mk = matieres.find(m => !used.has(m.id) && it.re.test(m.nom));
+      if (mk) used.add(mk.id);
+      return Object.assign({}, it, { matK: mk || null });
+    });
+
+    // Matières non reconnues -> groupe « Autres matières »
+    const autres = matieres.filter(m => !used.has(m.id));
+    if (autres.length) {
+      items.push({ gr: 'AUTRES MATIERES' });
+      autres.forEach(m => items.push({ nom: m.nom, matK: m, max: { p: 20, ex: 40 } }));
+      items.push({ st: 'Sous-total' });
+    }
+
+    // Accumulateurs : 6 périodes, 3 examens, 3 totaux trimestre, total général
+    const newAcc = () => ({ P: Array(6).fill(null), EX: Array(3).fill(null), T: Array(3).fill(null), TG: null });
+    const add = (a, b) => b === null ? a : (a === null ? b : a + b);
+    const addTo = (acc, v) => {
+      v.P.forEach((x, i) => acc.P[i] = add(acc.P[i], x));
+      v.EX.forEach((x, i) => acc.EX[i] = add(acc.EX[i], x));
+      v.T.forEach((x, i) => acc.T[i] = add(acc.T[i], x));
+      acc.TG = add(acc.TG, v.TG);
+    };
+
+    // Valeurs d'une matière (converties sur les maxima du papier)
+    const calcRow = (matK, mx) => {
+      const v = newAcc();
+      if (!matK) return v;
+      const maxK = +matK.max || 20;
+      const get = (code, maxG) => {
+        const x = (notes[matK.id + '_' + code] || {})[eleve.id];
+        if (x === undefined || x === null || x === '' || isNaN(x)) return null;
+        return (+x / maxK) * maxG;
+      };
+      PER.forEach((pr, t) => {
+        v.P[2 * t] = get(pr[0], mx.p);
+        v.P[2 * t + 1] = get(pr[1], mx.p);
+        v.EX[t] = get(pr[2], mx.ex);
+        const parts = [v.P[2 * t], v.P[2 * t + 1], v.EX[t]];
+        v.T[t] = parts.some(x => x !== null) ? parts.reduce((s, x) => s + (x || 0), 0) : null;
+      });
+      v.TG = v.T.some(x => x !== null) ? v.T.reduce((s, x) => s + (x || 0), 0) : null;
+      return v;
+    };
+
+    const f = v => v === null ? '' : String(Math.round(v * 10) / 10);
+
+    // 21 cellules à droite du libellé
+    const cells = (mp, mex, v) => {
+      const mt = mp * 2 + mex;
+      let h = `<td>${mp}</td><td>${f(v.P[0])}</td><td>${f(v.P[1])}</td><td>${mex}</td><td>${f(v.EX[0])}</td><td>${mt}</td><td>${f(v.T[0])}</td>`;
+      for (let t = 1; t < 3; t++) {
+        h += `<td>${f(v.P[2 * t])}</td><td>${f(v.P[2 * t + 1])}</td><td>${mex}</td><td>${f(v.EX[t])}</td><td>${mt}</td><td>${f(v.T[t])}</td>`;
+      }
+      return h + `<td>${mt * 3}</td><td>${f(v.TG)}</td>`;
+    };
+
+    let tbody = '';
+    let seg = newAcc(), segP = 0, segEx = 0;
+    const tot = newAcc();
+    const mxT = [0, 0, 0];
+    let mxTG = 0;
+
+    items.forEach(it => {
+      if (it.dm) {
+        tbody += `<tr class="dm"><td colspan="22">${esc(it.dm)}</td></tr>`;
+        seg = newAcc(); segP = 0; segEx = 0;
+        return;
+      }
+      if (it.gr) {
+        tbody += `<tr class="gr"><td colspan="22">${esc(it.gr)}</td></tr>`;
+        return;
+      }
+      if (it.st) {
+        tbody += `<tr class="st"><td class="br">${esc(it.st)}</td>${cells(segP, segEx, seg)}</tr>`;
+        seg = newAcc(); segP = 0; segEx = 0;
+        return;
+      }
+      const v = calcRow(it.matK, it.max);
+      addTo(seg, v); addTo(tot, v);
+      segP += it.max.p; segEx += it.max.ex;
+      const mt = it.max.p * 2 + it.max.ex;
+      v.T.forEach((x, t) => { if (x !== null) mxT[t] += mt; });
+      if (v.TG !== null) mxTG += mt * 3;
+      tbody += `<tr${it.tall ? ' class="st tall"' : ''}><td class="br">${esc(it.nom)}${it.sup ? ' <sup>(1)</sup>' : ''}</td>${cells(it.max.p, it.max.ex, v)}</tr>`;
+    });
+
+    // Maxima généraux (papier) + points obtenus
+    let sP = 0, sEx = 0;
+    M.structure.forEach(it => { if (it.nom) { sP += it.max.p; sEx += it.max.ex; } });
+    tbody += `<tr class="st"><td class="br">Maxima généraux</td>${cells(sP, sEx, tot)}</tr>`;
+
+    // Lignes de bas de tableau (cases hachurées sur les colonnes MAX)
+    const H = '<td class="hat"></td>', E = '<td></td>';
+    const bas = (label, tv, tg) => {
+      const t = i => `<td>${tv ? tv[i] : ''}</td>`;
+      return `<tr class="ht"><td class="br">${label}</td>${H}${E}${E}${H}${E}${H}${t(0)}${E}${E}${H}${E}${H}${t(1)}${E}${E}${H}${E}${H}${t(2)}${H}<td>${tg || ''}</td></tr>`;
+    };
+    const pct = (a, b) => (a !== null && b) ? n2(a / b * 100) + '%' : '';
+    tbody += bas('POURCENTAGE', [0, 1, 2].map(i => pct(tot.T[i], mxT[i])), pct(tot.TG, mxTG));
+    tbody += bas('PLACE', null, rang ? esc(rang) : '');
+    tbody += bas('NBRE D’ELEVES', null, nEleves ? esc(nEleves) : '');
+    tbody += bas('APPLICATION');
+    tbody += bas('CONDUITE');
+    tbody += bas('SIGNAT. DE L’INST.');
+    tbody += bas('SIGNAT. DU RESP.');
+
+    const idCases = Array.from({ length: 20 }, () => '<i></i>').join('');
+    const codeCases = Array.from({ length: 9 }, () => '<i></i>').join('');
+    const permCases = Array.from({ length: 13 }, () => '<i></i>').join('');
+
+    const colgroup = '<colgroup><col style="width:130px"><col style="width:30px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:38px"><col style="width:34px"></colgroup>';
+    const thead = `<thead>
+      <tr><th class="br" rowspan="2">BRANCHES</th><th colspan="7">PREMIER TRIMESTRE</th><th colspan="6">DEUXIEME TRIMESTRE</th><th colspan="6">TROISIEME TRIMESTRE</th><th colspan="2">TOTAL</th></tr>
+      <tr><th>MAX<br>per</th><th>1<sup>ère</sup>P.</th><th>2<sup>è</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>3<sup>e</sup>P.</th><th>4<sup>e</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>5<sup>e</sup>P.</th><th>6<sup>e</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>MAX.</th><th>PTS<br>OBT.</th></tr>
+    </thead>`;
+
+    return `
+<div class="bulletin elem" id="bulletin-${esc(M.ref.replace(/[^0-9A-Za-z]+/g, '-'))}">
+  <img class="wm" src="filigrane.jpg" alt="">
+  <div class="hd">
+    <img class="flag" src="drapeau.png" alt="Drapeau RDC">
+    <div class="t">REPUBLIQUE DEMOCRATIQUE DU CONGO<br>MINISTERE DE L’EDUCATION NATIONALE<br>ET NOUVELLE CITOYENNETE</div>
+    <img class="logo" src="logo.png" alt="Logo Ministère">
+  </div>
+  <div class="idr"><span class="lbl">N° ID.</span><span class="bx id">${idCases}</span></div>
+  <div class="info">
+    <div>
+      <div class="f">PROVINCE EDUCATIONNELLE :<span class="l">${esc(etab.province || '')}</span></div>
+      <div class="f">VILLE :<span class="l">${esc(etab.ville || '')}</span></div>
+      <div class="f">COMMUNE / TER. (1) :<span class="l">${esc(etab.commune || '')}</span></div>
+      <div class="f">ECOLE :<span class="l">${esc(etab.nom || '')}</span></div>
+      <div class="f bxrow">CODE : <span class="bx code">${codeCases}</span></div>
+    </div>
+    <div>
+      <div class="f">ELEVE :<span class="l">${esc([eleve.nom, eleve.postnom, eleve.prenom].filter(Boolean).join(' '))}</span> SEXE :<span class="l" style="max-width:60px">${eleve.sexe === 'M' ? 'M' : eleve.sexe === 'F' ? 'F' : ''}</span></div>
+      <div class="f">NE(E) A :<span class="l">${esc(eleve.lieuNaiss || '')}</span> LE<span class="l" style="max-width:90px">${esc(eleve.naiss || '')}</span></div>
+      <div class="f">CLASSE :<span class="l">${esc(classe.nom || '')}</span></div>
+      <div class="f bxrow">N° PERM. : <span class="bx perm">${permCases}</span></div>
+    </div>
+  </div>
+  <div class="title"><span>${M.titre}</span><span class="annee">ANNEE SCOLAIRE <span class="a">${esc(annee)}</span></span></div>
+  <table>
+    ${colgroup}
+    ${thead}
+    <tbody>${tbody}</tbody>
+  </table>
+  <div class="ft">
+    <div>- L’élève passe dans la classe supérieure (1)<br>- L’élève double la classe (1)</div>
+    <div>Fait à <span class="dl" style="width:190px"></span> le <span class="dl" style="width:60px"></span> / <span class="dl" style="width:60px"></span> / <span class="dl" style="width:60px"></span></div>
+  </div>
+  <div class="sg"><div>Signature de l’élève</div><div>Sceau de l’Ecole</div><div>Chef d’Etablissement<br>Noms &amp; Signature</div></div>
+  <div class="note"><div>(1) Biffer la mention inutile.<br>NOTE IMPORTANTE : Le bulletin est sans valeur s’il est raturé ou surchargé.<br><i>Interdiction formelle de reproduire ce bulletin sous peine des sanctions prévues par la loi.</i></div><em>${esc(M.ref)}</em></div>
+</div>`;
+  }
+
   /* ---------- Rendu HTML ---------- */
   function render(data) {
     const {
@@ -467,6 +728,7 @@
 
     // Modèle choisi pour la classe (IGE-010 par défaut pour les anciennes classes)
     const M = MODELES[classe.modeleBulletin] || MODELES[MODELE_DEFAUT];
+    if (M.type === 'elementaire') return renderElementaire(data, M);
     const exEtat = !!M.examenEtat;
 
     // Construire la structure des groupes avec matières réelles
