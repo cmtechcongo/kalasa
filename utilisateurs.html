@@ -41,6 +41,9 @@ import { sb, exigerSession, SUPABASE_URL, SUPABASE_KEY } from './kalasa-db.js';
 const C = await exigerSession(['admin']);
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* Nom exact de la fonction d'activation des élèves, tel qu'affiché dans Supabase → Edge Functions */
+const FONC_ELEVE = 'activer-eleve';
+const LOGIN_RE = /^[a-zA-Z0-9._-]{3,100}$/;
 const ETABS = C.etablissements || [];
 const nomE = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code) : '—'; };
 const ROLES = { admin: 'Administrateur', directeur: 'Directeur', secretaire: 'Secrétaire', enseignant: 'Enseignant', caissier: 'Caissier', surveillant: 'Surveillant / Discipline', parent: 'Parent / Tuteur', eleve: 'Élève' };
@@ -50,17 +53,24 @@ const normM = m => String(m || '').replace(/\s+/g, '').toUpperCase();
 const normTel = t => String(t || '').replace(/\D/g, '').slice(-9);
 const nomDe = x => [x.nom, x.postnom, x.prenom].filter(Boolean).join(' ');
 const nomClasse = c => c.nom + (c.option_faculte ? ' · ' + c.option_faculte : '');
-let SANS = [], PROFILS = [], UE = {}, CL = [], AN = [], SC = [], PAR = [];
+/* Date de naissance de la fiche, quel que soit le nom de la colonne (même règle que la fonction serveur) */
+const naissanceDe = r => {
+  for (const k of Object.keys(r)) {
+    if (/naiss/i.test(k) && /^\d{4}-\d{2}-\d{2}/.test(String(r[k] ?? ''))) return String(r[k]).slice(0, 10);
+  }
+  return '';
+};
+let SANS = [], PROFILS = [], UE = {}, CL = [], AN = [], SC = [], PAR = [], ELEVES = [];
 const libAnnee = id => { const a = AN.find(x => x.id === id); return a ? a.lib : '—'; };
 const nbEnfants = p => (p.parent_eleves || []).length;
 const PAR_SANS = () => PAR.filter(p => !p.utilisateur_id && nbEnfants(p) > 0);
 
-$('role').innerHTML = ['enseignant', 'secretaire', 'directeur', 'caissier', 'surveillant', 'parent', 'admin']
-  .map(k => `<option value="${k}" ${k === 'enseignant' ? 'selected' : ''}>${ROLES[k]}</option>`).join('')
-  + '<option value="eleve" disabled>Élève (bientôt disponible)</option>';
+$('role').innerHTML = ['enseignant', 'secretaire', 'directeur', 'caissier', 'surveillant', 'parent', 'eleve', 'admin']
+  .map(k => `<option value="${k}" ${k === 'enseignant' ? 'selected' : ''}>${ROLES[k]}</option>`).join('');
 $('etabs').innerHTML = ETABS.map(e => `<label><input type="checkbox" value="${esc(e.id)}"> ${esc(e.nom || e.code)}</label>`).join('') || '<small>Aucun établissement créé</small>';
 const estAdmin = () => $('role').value === 'admin';
 const estParent = () => $('role').value === 'parent';
+const estEleve = () => $('role').value === 'eleve';
 
 function genererMdp() {
   const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -82,11 +92,13 @@ async function appeler(fonction, corps) {
 }
 
 function maj() {
-  const h = $('hn'), n = $('nom'), adm = estAdmin(), par = estParent();
-  $('zetabs').style.display = (adm || par) ? 'none' : 'block';
+  const h = $('hn'), n = $('nom'), adm = estAdmin(), par = estParent(), ele = estEleve();
+  $('zetabs').style.display = (adm || par || ele) ? 'none' : 'block';
   $('zmat').style.display = adm ? 'none' : 'block';
-  $('lmat').textContent = par ? 'Numéro de téléphone du parent (confirmation) *' : 'Numéro matricule du personnel (confirmation) *';
-  $('mat').placeholder = par ? 'ex : 0990000000' : 'ex : PER-0001';
+  $('lmat').textContent = par ? 'Numéro de téléphone du parent (confirmation) *'
+    : ele ? 'Numéro matricule de l\'élève (confirmation) *'
+    : 'Numéro matricule du personnel (confirmation) *';
+  $('mat').placeholder = par ? 'ex : 0990000000' : ele ? 'ex : 2026-0001' : 'ex : PER-0001';
   $('mat').type = par ? 'tel' : 'text';
   if (adm) { n.removeAttribute('list'); h.textContent = ''; return; }
   n.setAttribute('list', 'lp');
@@ -98,6 +110,15 @@ function maj() {
     h.textContent = !n.value.trim() ? 'Choisissez un nom dans la liste des parents sans compte (avec au moins un enfant lié).'
       : l.length ? '✔ Nom trouvé' + (l.length > 1 ? ' (' + l.length + ' parents portent ce nom)' : '') + ' — confirmez par le numéro de téléphone.'
       : '✖ Ce nom n\'est pas dans la liste des parents sans compte ayant un enfant lié.';
+    return;
+  }
+  if (ele) {
+    // Les matricules ne sont volontairement PAS affichés : il faut les connaître pour confirmer.
+    $('lp').innerHTML = ELEVES.map(x => `<option value="${esc(nomDe(x))}">${esc(nomE(x.etablissement_id))}</option>`).join('');
+    const l = n.value.trim() ? ELEVES.filter(x => cle(nomDe(x)) === cle(n.value)) : [];
+    h.textContent = !n.value.trim() ? 'Choisissez un nom dans la liste des élèves inscrits sans compte.'
+      : l.length ? '✔ Nom trouvé' + (l.length > 1 ? ' (' + l.length + ' élèves portent ce nom)' : '') + ' — confirmez par le numéro matricule.'
+      : '✖ Ce nom n\'est pas dans la liste des élèves inscrits sans compte.';
     return;
   }
   // Les matricules ne sont volontairement PAS affichés : il faut les connaître pour confirmer.
@@ -119,18 +140,29 @@ async function charger() {
   UE = {};
   const ru = await sb.from('utilisateur_etablissements').select('utilisateur_id, etablissement_id');
   if (!ru.error) (ru.data || []).forEach(r => (UE[r.utilisateur_id] = UE[r.utilisateur_id] || []).push(r.etablissement_id));
-  const [rc, ra, rs, rpa] = await Promise.all([
+  const [rc, ra, rs, rpa, ri] = await Promise.all([
     sb.from('classes').select('id, nom, option_faculte, etablissement_id, annee_id'),
     sb.from('annees_scolaires').select('id, lib, active, debut').order('debut', { ascending: false }),
     sb.from('surveillant_classes').select('id, utilisateur_id, classe_id, etablissement_id'),
-    sb.from('parents').select('id, nom, postnom, prenom, tel, tel2, etablissement_id, utilisateur_id, parent_eleves(inscription_id)')
+    sb.from('parents').select('id, nom, postnom, prenom, tel, tel2, etablissement_id, utilisateur_id, parent_eleves(inscription_id)'),
+    sb.from('inscriptions').select('*').is('utilisateur_id', null).order('nom').limit(1000)
   ]);
   CL = rc.error ? [] : (rc.data || []);
   AN = ra.error ? [] : (ra.data || []);
   SC = rs.error ? [] : (rs.data || []);
   PAR = rpa.error ? [] : (rpa.data || []);
+  /* Élèves inscrits sans compte : un seul par matricule et établissement, hors élèves déjà dotés d'un compte */
+  const dejaCompte = new Set(PROFILS.filter(p => p.role === 'eleve')
+    .flatMap(p => (UE[p.id] || []).map(e => normM(p.matricule) + '|' + e)));
+  const vus = new Set();
+  ELEVES = ri.error ? [] : (ri.data || []).filter(x => {
+    const k = normM(x.matricule) + '|' + x.etablissement_id;
+    if (!x.matricule || dejaCompte.has(k) || vus.has(k)) return false;
+    vus.add(k); return true;
+  });
   if (rs.error) $('err2').textContent = 'Lecture des classes des surveillants impossible : ' + rs.error.message;
   else if (rpa.error) $('err2').textContent = 'Lecture des parents impossible : ' + rpa.error.message;
+  else if (ri.error) $('err2').textContent = 'Lecture des élèves inscrits impossible : ' + ri.error.message;
   maj(); rendu();
 }
 
@@ -138,7 +170,6 @@ function rendu() {
   $('liste').innerHTML = PROFILS.length ? PROFILS.map(u => {
     const moi = u.id === C.id, off = u.actif === false, ets = UE[u.id] || [];
     const ligne = u.role === 'admin' ? 'Tous les établissements'
-      : u.role === 'eleve' ? '—'
       : ets.length ? ets.map(nomE).map(esc).join(', ')
       : '<b style="color:#dc2626">Aucun (compte bloqué) — attribuez un établissement</b>';
     let ligneClasses = '';
@@ -193,7 +224,9 @@ async function actionActif(id) {
 
 async function actionSupp(id) {
   const u = prof(id); if (!u) return;
-  const fiche = u.role === 'parent' ? 'La fiche du parent est conservée.' : 'La fiche du personnel est conservée.';
+  const fiche = u.role === 'parent' ? 'La fiche du parent est conservée.'
+    : u.role === 'eleve' ? 'La fiche de l\'élève est conservée.'
+    : 'La fiche du personnel est conservée.';
   if (!confirm('Supprimer le compte de ' + u.nom_complet + ' ? ' + fiche)) return;
   try { await appeler('gerer-utilisateurs', { action: 'supprimer', user_id: id }); await charger(); }
   catch (e) { $('err2').textContent = e.message; }
@@ -272,7 +305,6 @@ async function creer(ev) {
   try {
     const role = $('role').value, nom = $('nom').value.trim();
     const login = $('login').value.trim(), mdp = $('mdp').value;
-    if (role === 'eleve') throw new Error('Le rôle Élève sera disponible après la migration des élèves.');
     if (login.length < 3) throw new Error('Identifiant trop court (3 caractères minimum).');
     if (mdp.length < 10) throw new Error('Mot de passe trop court (10 caractères minimum).');
     let r, ident = login;
@@ -290,6 +322,22 @@ async function creer(ev) {
       if (F.length > 1) throw new Error('Plusieurs fiches correspondent à ce nom et ce numéro. Contactez le support.');
       b.disabled = true; b.textContent = 'Création…';
       r = await appeler('creer-parent', { parent_id: F[0].id, identifiant: login, mot_de_passe: mdp });
+    } else if (role === 'eleve') {
+      const l = ELEVES.filter(x => cle(nomDe(x)) === cle(nom));
+      if (!l.length) throw new Error('Refusé : « ' + nom + ' » n\'est pas dans la liste des élèves inscrits sans compte. Vérifiez que l\'élève est bien inscrit dans la page Inscriptions.');
+      const m = normM($('mat').value);
+      if (!m) throw new Error('Saisissez le numéro matricule de l\'élève pour confirmer.');
+      const F = l.filter(x => normM(x.matricule) === m);
+      if (!F.length) throw new Error('Refusé : ce numéro matricule ne correspond pas à « ' + nom + ' ».');
+      if (F.length > 1) throw new Error('Plusieurs fiches correspondent (établissements différents). Contactez le support.');
+      const f = F[0];
+      const nai = naissanceDe(f);
+      if (!nai) throw new Error('La date de naissance de cet élève est introuvable sur sa fiche : complétez-la dans la page Inscriptions.');
+      if (!LOGIN_RE.test(login)) throw new Error('Identifiant invalide : lettres, chiffres, point, tiret et underscore uniquement (3 à 100 caractères).');
+      if (mdp.length > 72) throw new Error('Mot de passe trop long (72 caractères maximum).');
+      b.disabled = true; b.textContent = 'Création…';
+      const v = await appeler(FONC_ELEVE, { action: 'verifier', matricule: f.matricule, nom: f.nom, naissance: nai });
+      r = await appeler(FONC_ELEVE, { action: 'activer', matricule: f.matricule, nom: f.nom, naissance: nai, code: v.code, identifiant: login, mot_de_passe: mdp });
     } else {
       const l = SANS.filter(x => cle(nomDe(x)) === cle(nom));
       if (!l.length) throw new Error('Refusé : « ' + nom + ' » n\'est pas dans la liste du personnel sans compte. Enregistrez d\'abord cette personne dans la page Personnel.');
