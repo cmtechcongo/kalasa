@@ -42,7 +42,7 @@ const C = await exigerSession(['admin']);
 const $ = i => document.getElementById(i);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /* Nom exact de la fonction d'activation des élèves, tel qu'affiché dans Supabase → Edge Functions */
-const FONC_ELEVE = 'activer-eleve';
+const FONC_ELEVE = 'activer_eleve';
 const LOGIN_RE = /^[a-zA-Z0-9._-]{3,100}$/;
 const ETABS = C.etablissements || [];
 const nomE = id => { const e = ETABS.find(x => x.id === id); return e ? (e.nom || e.code) : '—'; };
