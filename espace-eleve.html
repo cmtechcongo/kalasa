@@ -29,21 +29,11 @@ th:not(:first-child),td:not(:first-child){text-align:right}
 </style></head><body>
 <header>🎓 KALASA · Mon espace <button type="button" class="hbtn" id="deco" title="Déconnexion">🚪</button></header>
 <main id="app"><div class="card"><p class="v">Chargement…</p></div></main>
-
-
-
-
 <script src="bulletin-modele.js"></script>
 <script src="bulletin-primaire.js"></script>
 <script src="bulletin-univ.js"></script>
-
-
-
-
-
 <script type="module">
 import { sb, exigerSession, deconnexion } from './kalasa-db.js';
-
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const erreur = (msg, e) => {
@@ -79,7 +69,6 @@ try {
   const rEl = await sb.from('inscriptions').select('*').eq('id', ri.data).single();
   if (rEl.error) throw rEl.error;
   const el = rEl.data;
-
   const [rc, re, ra, rh, rp, rm, rn, rf, rpa] = await Promise.all([
     sb.from('classes').select('*').eq('id', el.classe_id).single(),
     sb.from('etablissements').select('*').eq('id', el.etablissement_id).single(),
@@ -98,12 +87,20 @@ try {
   const fmt = n => (+n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + DEV;
   const fmtD = d => d ? String(d).split('-').reverse().join('/') : '';
   const JL = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  const PER = [['P1', '1ère période'], ['P2', '2ème période'], ['EX1', 'Examen 1er semestre'],
-               ['P3', '3ème période'], ['P4', '4ème période'], ['EX2', 'Examen 2ème semestre']];
-
   const cl = rc.data, etObj = re.data, an = ra.data.lib || '';
-  /* Objet « classe » au format attendu par bulletin-modele.js */
-  const clB = { id: cl.id, nom: cl.nom, type: cl.type, modeleBulletin: cl.modele_bulletin };
+
+  /* Niveau Université : notes par SESSION (S1, S2) et relevé de notes */
+  const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const UNIV = /univers/.test(norm(cl.type || cl.niveau));
+  const PER = UNIV
+    ? [['S1', '1ère session'], ['S2', '2ème session']]
+    : [['P1', '1ère période'], ['P2', '2ème période'], ['EX1', 'Examen 1er semestre'],
+       ['P3', '3ème période'], ['P4', '4ème période'], ['EX2', 'Examen 2ème semestre']];
+  const MOT = UNIV ? 'relevé' : 'bulletin';
+
+  /* Objet « classe » au format attendu par bulletin-modele.js / bulletin-univ.js */
+  const clB = { id: cl.id, nom: cl.nom, type: cl.type, modeleBulletin: cl.modele_bulletin,
+    option: cl.option || cl.option_faculte || cl.faculte || '', domaine: cl.domaine || '' };
   const modeleOk = BULLETIN.estDisponible(clB);
 
   /* ----- Emploi du temps ----- */
@@ -126,7 +123,7 @@ try {
 
   /* ----- Notes ----- */
   const MAT = (rm.data || []).map(m => ({ id: m.id, nom: m.nom, coef: +m.coef || 1, max: +m.note_max || 20 }));
-  const N = {};                                   // format attendu par le bulletin : matiere_PERIODE -> { eleveId: valeur }
+  const N = {}; // format attendu par le bulletin : matiere_PERIODE -> { eleveId: valeur }
   (rn.data || []).forEach(r => { (N[r.matiere_id + '_' + r.periode] = N[r.matiere_id + '_' + r.periode] || {})[el.id] = +r.valeur; });
   const note = (m, p) => (N[m.id + '_' + p] || {})[el.id];
   const moyP = p => {
@@ -134,20 +131,32 @@ try {
     MAT.forEach(m => { const v = note(m, p); if (v !== undefined) { pts += v / m.max * 20 * m.coef; co += m.coef; } });
     return co ? pts / co : null;
   };
-  const moyA = () => { const a = PER.map(([k]) => moyP(k)).filter(x => x !== null); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; };
+  /* Université : moyenne annuelle pondérée par les crédits (comme sur le relevé) */
+  const moyUniv = () => {
+    let pts = 0, co = 0;
+    MAT.forEach(m => {
+      const v = PER.map(([k]) => note(m, k)).filter(x => x !== undefined).map(x => x / m.max * 20);
+      if (v.length) { pts += v.reduce((a, b) => a + b, 0) / v.length * m.coef; co += m.coef; }
+    });
+    return co ? pts / co : null;
+  };
+  const moyA = () => {
+    if (UNIV) return moyUniv();
+    const a = PER.map(([k]) => moyP(k)).filter(x => x !== null);
+    return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+  };
   const c20 = v => v === null ? '' : v >= 14 ? 'bon' : v >= 10 ? 'moy' : 'bas';
   const f2 = v => v === null ? '—' : v.toFixed(2);
-
   function tabNotes(p) {
     if (p === 'ANNUEL') {
       const m = moyA();
-      return '<table><tr><th>Période</th><th>Moyenne /20</th></tr>' +
+      return '<table><tr><th>' + (UNIV ? 'Session' : 'Période') + '</th><th>Moyenne /20</th></tr>' +
         PER.map(([k, l]) => { const v = moyP(k); return '<tr><td>' + l + '</td><td class="' + c20(v) + '">' + f2(v) + '</td></tr>'; }).join('') +
         '<tr><td><b>Moyenne annuelle</b></td><td class="' + c20(m) + '"><b>' + f2(m) + '</b></td></tr></table>';
     }
     const m = moyP(p);
     if (!MAT.length) return '<p class="v">Aucune matière définie.</p>';
-    return '<table><tr><th>Matière</th><th>Coef</th><th>Note</th><th>/20</th></tr>' +
+    return '<table><tr><th>Matière</th><th>' + (UNIV ? 'Crédits' : 'Coef') + '</th><th>Note</th><th>/20</th></tr>' +
       MAT.map(x => {
         const v = note(x, p);
         return '<tr><td>' + esc(x.nom) + '</td><td>' + x.coef + '</td><td>' + (v === undefined ? '—' : v + '/' + x.max) + '</td><td>' +
@@ -168,15 +177,15 @@ try {
   const payeF = id => PA.filter(p => p.frais_id === id).reduce((s, p) => s + +p.montant, 0);
   const detailReste = FR.map(f => ({ lib: f.lib, reste: Math.max(0, +f.montant - payeF(f.id)) })).filter(x => x.reste > 0);
 
-  /* ----- Bloc bulletin (3 états : indisponible / verrouillé / disponible) ----- */
+  /* ----- Bloc bulletin / relevé (3 états : indisponible / verrouillé / disponible) ----- */
   const blocBulletin = !modeleOk
-    ? '<div class="blo">ℹ️ ' + esc(BULLETIN.MOTIF) + '</div><button class="btn" disabled>📥 Bulletin indisponible</button>'
+    ? '<div class="blo">ℹ️ ' + esc(BULLETIN.MOTIF) + '</div><button class="btn" disabled>📥 ' + (UNIV ? 'Relevé indisponible' : 'Bulletin indisponible') + '</button>'
     : solde
-      ? '<p style="font-size:.9rem;margin:0 0 4px">✅ Les frais scolaires sont soldés. Le bulletin officiel peut être téléchargé et imprimé.</p>' +
-        '<button class="btn" id="btnBulletin">📥 Télécharger le bulletin</button>'
-      : '<p style="font-size:.9rem;margin:0 0 4px">🔒 Le bulletin devient disponible dès que tous les frais scolaires de l\'année sont réglés.</p>' +
-        '<div class="blo">💡 Reste à payer : <b>' + fmt(reste) + '</b><br>Présentez-vous au secrétariat avec ce montant pour débloquer le bulletin.</div>' +
-        '<button class="btn" disabled>📥 Bulletin verrouillé</button>';
+      ? '<p style="font-size:.9rem;margin:0 0 4px">✅ Les frais ' + (UNIV ? 'académiques' : 'scolaires') + ' sont soldés. ' + (UNIV ? 'Le relevé de notes peut être téléchargé et imprimé.' : 'Le bulletin officiel peut être téléchargé et imprimé.') + '</p>' +
+        '<button class="btn" id="btnBulletin">📥 ' + (UNIV ? 'Télécharger le relevé' : 'Télécharger le bulletin') + '</button>'
+      : '<p style="font-size:.9rem;margin:0 0 4px">🔒 ' + (UNIV ? 'Le relevé devient disponible' : 'Le bulletin devient disponible') + ' dès que tous les frais de l\'année sont réglés.</p>' +
+        '<div class="blo">💡 Reste à payer : <b>' + fmt(reste) + '</b><br>Présentez-vous au secrétariat avec ce montant pour débloquer ' + (UNIV ? 'le relevé' : 'le bulletin') + '.</div>' +
+        '<button class="btn" disabled>📥 ' + (UNIV ? 'Relevé verrouillé' : 'Bulletin verrouillé') + '</button>';
 
   /* ----- Rendu principal ----- */
   app.innerHTML =
@@ -184,7 +193,7 @@ try {
       '<div class="ln"><span>Matricule</span><b>' + esc(el.matricule || '—') + '</b></div>' +
       '<div class="ln"><span>Classe</span><b>' + esc(cl.nom || '—') + '</b></div>' +
       '<div class="ln"><span>Établissement</span><b>' + esc(etObj.nom || '') + '</b></div>' +
-      '<div class="ln"><span>Année scolaire</span><b>' + esc(an) + '</b></div></div>' +
+      '<div class="ln"><span>' + (UNIV ? 'Année universitaire' : 'Année scolaire') + '</span><b>' + esc(an) + '</b></div></div>' +
     '<div class="card"><h2>🕐 Emploi du temps</h2>' + hHtml + '</div>' +
     '<div class="card"><h2>✅ Présences</h2>' +
       '<div class="stat"><div><b class="bon">' + C.P + '</b>Présent</div><div><b class="moy">' + C.R + '</b>Retard</div>' +
@@ -194,8 +203,8 @@ try {
     '</div>' +
     '<div class="card"><h2>📝 Notes</h2>' +
       '<select id="per">' + PER.map(([k, l]) => '<option value="' + k + '">' + l + '</option>').join('') + '<option value="ANNUEL">Résumé annuel</option></select>' +
-      '<div id="nt">' + tabNotes('P1') + '</div></div>' +
-    '<div class="card"><h2>💵 Frais scolaires</h2>' +
+      '<div id="nt">' + tabNotes(PER[0][0]) + '</div></div>' +
+    '<div class="card"><h2>💵 Frais ' + (UNIV ? 'académiques' : 'scolaires') + '</h2>' +
       (D
         ? '<div class="ln"><span>Total à payer</span><b>' + fmt(D) + '</b></div>' +
           '<div class="ln"><span>Déjà payé</span><b class="bon">' + fmt(Pd) + '</b></div>' +
@@ -209,30 +218,36 @@ try {
         PA.map(p => '<div class="ln"><span>' + esc(fmtD(p.date_paiement)) + '<br><small>' + esc(libF(p.frais_id)) + '</small></span><b>' + fmt(p.montant) + '</b></div>').join('')
         : '') +
     '</div>' +
-    '<div class="card"><h2>📄 Bulletin scolaire</h2>' + blocBulletin + '</div>';
+    '<div class="card"><h2>📄 ' + (UNIV ? 'Relevé de notes' : 'Bulletin scolaire') + '</h2>' + blocBulletin + '</div>';
 
   const perSel = document.getElementById('per');
   if (perSel) perSel.addEventListener('change', e => { document.getElementById('nt').innerHTML = tabNotes(e.target.value); });
   const btnB = document.getElementById('btnBulletin');
-  if (btnB) btnB.addEventListener('click', () => ouvrirBulletin().catch(e => erreur('Impossible d\'ouvrir le bulletin', e)));
+  if (btnB) btnB.addEventListener('click', () => ouvrirBulletin().catch(e => erreur('Impossible d\'ouvrir le ' + MOT, e)));
 
-  /* ===== Bulletin officiel RDC ===== */
+  /* ===== Bulletin officiel RDC / Relevé de notes ===== */
   async function ouvrirBulletin() {
     if (!modeleOk) return alert(BULLETIN.MOTIF);
-    if (!solde) return alert('Le bulletin est verrouillé : il reste ' + fmt(reste) + ' à payer.');
-    // Rang dans la classe : calculé par la base (moyenne annuelle sur 6 périodes), sans exposer les notes des camarades
+    if (!solde) return alert('Le ' + MOT + ' est verrouillé : il reste ' + fmt(reste) + ' à payer.');
+    // Rang dans la classe (bulletin scolaire seulement) : calculé par la base, sans exposer les notes des camarades
     let rang = '', nEl = '';
-    const rr = await sb.rpc('kalasa_rang_de', { p_ins: el.id });
-    if (!rr.error && rr.data && rr.data[0]) { rang = Number(rr.data[0].rang); nEl = Number(rr.data[0].n_eleves); }
-    BULLETIN.ouvrir({
-      eleve: { id: el.id, nom: el.nom, postnom: el.postnom, prenom: el.prenom, sexe: el.sexe, lieuNaiss: '', naiss: fmtD(el.date_naissance) },
+    if (!UNIV) {
+      const rr = await sb.rpc('kalasa_rang_de', { p_ins: el.id });
+      if (!rr.error && rr.data && rr.data[0]) { rang = Number(rr.data[0].rang); nEl = Number(rr.data[0].n_eleves); }
+    }
+    const data = {
+      eleve: { id: el.id, nom: el.nom, postnom: el.postnom, prenom: el.prenom, sexe: el.sexe, matricule: el.matricule || '',
+        lieuNaiss: el.lieu_naissance || '', naiss: fmtD(el.date_naissance) },
       classe: clB,
       etab: etObj,
       annee: an,
       notes: N,
       matieres: MAT,
       rang, nEleves: nEl
-    });
+    };
+    const html = BULLETIN.render(data);                       // contrôle : jamais de page vierge
+    if (!html || html.indexOf('class="bulletin') < 0) throw new Error('Le modèle de ' + MOT + ' n\'a rien produit pour cette classe.');
+    BULLETIN.ouvrir(data);
   }
 } catch (e) {
   if (e !== 'stop') erreur('Erreur d\'initialisation de la page', e);
