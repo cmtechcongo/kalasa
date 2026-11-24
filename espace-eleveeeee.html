@@ -23,11 +23,24 @@ th:not(:first-child),td:not(:first-child){text-align:right}
 .blo{background:#fef3c7;border-left:4px solid #f59e0b;color:#78350f;padding:12px;border-radius:8px;font-size:.88rem;margin-top:8px}
 @media(prefers-color-scheme:dark){.blo{background:#422006;color:#fde68a}}
 .err{background:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;font-size:.88rem;margin-bottom:10px}
+/* Affichage intégré dans l'espace parent : pas d'en-tête propre */
+.integre header{display:none}
+.integre body{padding-top:0}
 </style></head><body>
 <header>🎓 KALASA · Mon espace <button type="button" class="hbtn" id="deco" title="Déconnexion">🚪</button></header>
 <main id="app"><div class="card"><p class="v">Chargement…</p></div></main>
 
+
+
+
 <script src="bulletin-modele.js"></script>
+<script src="bulletin-primaire.js"></script>
+<script src="bulletin-univ.js"></script>
+
+
+
+
+
 <script type="module">
 import { sb, exigerSession, deconnexion } from './kalasa-db.js';
 
@@ -39,14 +52,28 @@ const erreur = (msg, e) => {
 };
 document.getElementById('deco').addEventListener('click', () => deconnexion());
 
-try {
-  await exigerSession(['eleve']);
+/* Paramètres : ?eleve=<inscription_id> (parent) et ?integre=1 (affichage dans l'espace parent) */
+const QS = new URLSearchParams(location.search);
+const ELEVE_PARAM = QS.get('eleve') || null;
+const INTEGRE = QS.get('integre') === '1' && window.parent !== window;
+if (INTEGRE) {
+  document.documentElement.classList.add('integre');
+  const envoyer = () => parent.postMessage({ kalasa: 'hauteur', h: document.body.scrollHeight }, location.origin);
+  new ResizeObserver(envoyer).observe(document.body);
+  envoyer();
+}
 
-  /* ===== Chargement des données de l'élève (la base ne renvoie QUE ses propres lignes) ===== */
-  const ri = await sb.rpc('kalasa_mon_inscription');
+try {
+  const SES = await exigerSession(['eleve', 'parent']);
+  if (SES.role === 'parent' && !ELEVE_PARAM) { location.replace('espace-parent.html'); throw 'stop'; }
+
+  /* ===== Chargement des données (la base ne renvoie QUE les lignes autorisées) ===== */
+  const ri = await sb.rpc('kalasa_inscription_cible', { p: ELEVE_PARAM });
   if (ri.error) throw ri.error;
   if (!ri.data) {
-    app.innerHTML = '<div class="card">Ce compte n\'est lié à aucun élève. Demandez à l\'administrateur de le configurer.</div>';
+    app.innerHTML = '<div class="card">' + (SES.role === 'parent'
+      ? 'Cet enfant n\'est pas lié à votre compte.'
+      : 'Ce compte n\'est lié à aucun élève. Demandez à l\'administrateur de le configurer.') + '</div>';
     throw 'stop';
   }
   const rEl = await sb.from('inscriptions').select('*').eq('id', ri.data).single();
@@ -57,7 +84,7 @@ try {
     sb.from('classes').select('*').eq('id', el.classe_id).single(),
     sb.from('etablissements').select('*').eq('id', el.etablissement_id).single(),
     sb.from('annees_scolaires').select('lib').eq('id', el.annee_id).single(),
-    sb.rpc('kalasa_mon_emploi'),
+    sb.rpc('kalasa_emploi_de', { p_ins: el.id }),
     sb.from('presences').select('statut, date_appel').eq('inscription_id', el.id),
     sb.from('matieres').select('id, nom, coef, note_max').eq('classe_id', el.classe_id),
     sb.from('notes').select('matiere_id, periode, valeur').eq('inscription_id', el.id),
@@ -145,10 +172,10 @@ try {
   const blocBulletin = !modeleOk
     ? '<div class="blo">ℹ️ ' + esc(BULLETIN.MOTIF) + '</div><button class="btn" disabled>📥 Bulletin indisponible</button>'
     : solde
-      ? '<p style="font-size:.9rem;margin:0 0 4px">✅ Vous avez soldé vos frais scolaires. Vous pouvez télécharger et imprimer votre bulletin officiel.</p>' +
-        '<button class="btn" id="btnBulletin">📥 Télécharger mon bulletin</button>'
+      ? '<p style="font-size:.9rem;margin:0 0 4px">✅ Les frais scolaires sont soldés. Le bulletin officiel peut être téléchargé et imprimé.</p>' +
+        '<button class="btn" id="btnBulletin">📥 Télécharger le bulletin</button>'
       : '<p style="font-size:.9rem;margin:0 0 4px">🔒 Le bulletin devient disponible dès que tous les frais scolaires de l\'année sont réglés.</p>' +
-        '<div class="blo">💡 Reste à payer : <b>' + fmt(reste) + '</b><br>Présentez-vous au secrétariat avec ce montant pour débloquer votre bulletin.</div>' +
+        '<div class="blo">💡 Reste à payer : <b>' + fmt(reste) + '</b><br>Présentez-vous au secrétariat avec ce montant pour débloquer le bulletin.</div>' +
         '<button class="btn" disabled>📥 Bulletin verrouillé</button>';
 
   /* ----- Rendu principal ----- */
@@ -178,7 +205,7 @@ try {
             ? '<h2 class="sous">RESTE À PAYER</h2>' + detailReste.map(x => '<div class="ln"><span>– ' + esc(x.lib) + '</span><b class="bas">' + fmt(x.reste) + '</b></div>').join('')
             : '<p class="bon" style="margin:12px 0 0">✅ Tous les frais sont payés.</p>')
         : '<p class="v">Aucun frais défini.</p>') +
-      (PA.length ? '<h2 class="sous">MES PAIEMENTS</h2>' +
+      (PA.length ? '<h2 class="sous">PAIEMENTS</h2>' +
         PA.map(p => '<div class="ln"><span>' + esc(fmtD(p.date_paiement)) + '<br><small>' + esc(libF(p.frais_id)) + '</small></span><b>' + fmt(p.montant) + '</b></div>').join('')
         : '') +
     '</div>' +
@@ -192,10 +219,10 @@ try {
   /* ===== Bulletin officiel RDC ===== */
   async function ouvrirBulletin() {
     if (!modeleOk) return alert(BULLETIN.MOTIF);
-    if (!solde) return alert('Votre bulletin est verrouillé : il reste ' + fmt(reste) + ' à payer.');
+    if (!solde) return alert('Le bulletin est verrouillé : il reste ' + fmt(reste) + ' à payer.');
     // Rang dans la classe : calculé par la base (moyenne annuelle sur 6 périodes), sans exposer les notes des camarades
     let rang = '', nEl = '';
-    const rr = await sb.rpc('kalasa_mon_rang');
+    const rr = await sb.rpc('kalasa_rang_de', { p_ins: el.id });
     if (!rr.error && rr.data && rr.data[0]) { rang = Number(rr.data[0].rang); nEl = Number(rr.data[0].n_eleves); }
     BULLETIN.ouvrir({
       eleve: { id: el.id, nom: el.nom, postnom: el.postnom, prenom: el.prenom, sexe: el.sexe, lieuNaiss: '', naiss: fmtD(el.date_naissance) },
