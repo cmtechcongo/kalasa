@@ -7,6 +7,7 @@
    Modèle : REL-UNIV  (« Relevé de notes · Université »)
    Choix : « Modèle de bulletin » de la classe, sinon automatique
    pour toute classe de niveau Université.
+   Le relevé se télécharge directement en PDF (jsPDF + html2canvas).
    Règles de calcul (à régler dans REGLES) :
      crédits = coefficient de la matière · VH = crédits × 25
      note /20 = moyenne des sessions saisies (S1, S2), ramenée sur 20
@@ -33,24 +34,24 @@
   const CSS = `
 .bulletin.releve,.bulletin.releve *{box-sizing:border-box}
 .bulletin.releve{position:relative;width:794px;height:1123px;overflow:hidden;background:#fff;color:#1a1a1a;padding:40px 34px;font-family:"Times New Roman",Times,serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.bulletin.releve .entete{display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:10px}
-.bulletin.releve .logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden}.bulletin.releve .logo img{max-width:100%;max-height:100%;object-fit:contain;display:block}
-.bulletin.releve .titre{text-align:center;line-height:1.3}
-.bulletin.releve .inst{font:900 17px Arial,sans-serif}.bulletin.releve .sigle{font:bold 15px Arial,sans-serif}.bulletin.releve .rdc{font:bold 14px Arial,sans-serif}
-.bulletin.releve .rel{font:bold 15px Arial,sans-serif;text-decoration:underline;margin-top:4px}.bulletin.releve .presc{font:bold 12px Arial,sans-serif}
-.bulletin.releve .photo{width:90px;height:100px;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font:bold 13px Arial,sans-serif;justify-self:end;overflow:hidden}.bulletin.releve .photo img{width:100%;height:100%;object-fit:cover}
-.bulletin.releve .identite{margin:14px 0 8px;font:13px Arial,sans-serif;line-height:1.8}.bulletin.releve .ligne{display:flex;flex-wrap:wrap;gap:4px 28px}
+.bulletin.releve .rentete{display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:10px}
+.bulletin.releve .rlogo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden}.bulletin.releve .rlogo img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.bulletin.releve .rtitre{text-align:center;line-height:1.3}
+.bulletin.releve .rinst{font:900 17px Arial,sans-serif}.bulletin.releve .rsigle{font:bold 15px Arial,sans-serif}.bulletin.releve .rrdc{font:bold 14px Arial,sans-serif}
+.bulletin.releve .rrel{font:bold 15px Arial,sans-serif;text-decoration:underline;margin-top:4px}.bulletin.releve .rpresc{font:bold 12px Arial,sans-serif}
+.bulletin.releve .rphoto{width:90px;height:100px;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font:bold 13px Arial,sans-serif;justify-self:end;overflow:hidden}.bulletin.releve .rphoto img{width:100%;height:100%;object-fit:cover}
+.bulletin.releve .ridentite{margin:14px 0 8px;font:13px Arial,sans-serif;line-height:1.8}.bulletin.releve .rligne{display:flex;flex-wrap:wrap;gap:4px 28px}
 .bulletin.releve h2{text-align:center;font:15px Arial,sans-serif;margin:12px 0 6px}
 .bulletin.releve table{width:100%;border-collapse:collapse;font:11.5px Arial,sans-serif;table-layout:fixed}
 .bulletin.releve th,.bulletin.releve td{border:1px solid #444;padding:3px 4px;text-align:center;overflow:hidden}
-.bulletin.releve thead th{background:#e9e6df;font-weight:700}.bulletin.releve td.mat{text-align:left;font-weight:700}
-.bulletin.releve tr.total td{font-weight:700;font-size:13px;background:#e9e6df}.bulletin.releve .nv{font-weight:700}
+.bulletin.releve thead th{background:#e9e6df;font-weight:700}.bulletin.releve td.rmat{text-align:left;font-weight:700}
+.bulletin.releve tr.rtotal td{font-weight:700;font-size:13px;background:#e9e6df}.bulletin.releve .rnv{font-weight:700}
 .bulletin.releve.dense table{font-size:10px}.bulletin.releve.dense th,.bulletin.releve.dense td{padding:1px 3px}
-.bulletin.releve .bas{display:flex;justify-content:space-between;gap:20px;margin-top:14px;font:13px Arial,sans-serif}
-.bulletin.releve .resume{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:3px;margin:0}.bulletin.releve .resume dt{font-weight:700}.bulletin.releve .resume dd{margin:0}
-.bulletin.releve .signature{text-align:center;align-self:flex-end;font-size:12px;line-height:1.6;min-width:230px}.bulletin.releve .signature .parafe{height:34px}
-.bulletin.releve .legende{display:flex;justify-content:space-between;font:11px Arial,sans-serif;margin-top:12px}
-.bulletin.releve .nb{text-align:center;font-style:italic;font-size:12px;margin-top:14px}
+.bulletin.releve .rbas{display:flex;justify-content:space-between;gap:20px;margin-top:14px;font:13px Arial,sans-serif}
+.bulletin.releve .rresume{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:3px;margin:0}.bulletin.releve .rresume dt{font-weight:700}.bulletin.releve .rresume dd{margin:0}
+.bulletin.releve .rsignature{text-align:center;align-self:flex-end;font-size:12px;line-height:1.6;min-width:230px}.bulletin.releve .rsignature .rparafe{height:34px}
+.bulletin.releve .rlegende{display:flex;justify-content:space-between;font:11px Arial,sans-serif;margin-top:12px}
+.bulletin.releve .rnb{text-align:center;font-style:italic;font-size:12px;margin-top:14px}
 .bulletin-overlay{position:fixed;inset:0;background:#e5e5e5;z-index:9999;display:none;overflow:auto;padding:12px}
 .bulletin-overlay.show{display:block}
 .bulletin-overlay .bo-bar{position:sticky;top:0;background:#fff;padding:8px;display:flex;gap:8px;border-radius:8px;margin-bottom:10px;box-shadow:0 2px 6px #0003;z-index:10}
@@ -87,32 +88,32 @@
     const naiss = eleve.naiss || fd(eleve.date_naissance), lieu = eleve.lieuNaiss || eleve.lieu_naissance || '';
     const pho = eleve.photo || eleve.photo_url || '';
     const photo = pho ? `<img src="${esc(pho)}" alt="">` : 'PHOTO';
-    const lignes = R.lignes.map((l, i) => `<tr><td>${i + 1}</td><td></td><td class="mat">${esc(String(l.nom).toUpperCase())}</td><td>${fr(l.vh)}</td><td>${fr(l.cr)}</td><td>${fr(l.note, 2)}</td><td>${fr(l.pond, 1)}</td><td${l.valide === 'NV' ? ' class="nv"' : ''}>${l.valide}</td><td>${fr(l.crValides)}</td></tr>`).join('');
+    const lignes = R.lignes.map((l, i) => `<tr><td>${i + 1}</td><td></td><td class="rmat">${esc(String(l.nom).toUpperCase())}</td><td>${fr(l.vh)}</td><td>${fr(l.cr)}</td><td>${fr(l.note, 2)}</td><td>${fr(l.pond, 1)}</td><td${l.valide === 'NV' ? ' class="rnv"' : ''}>${l.valide}</td><td>${fr(l.crValides)}</td></tr>`).join('');
     const decision = REGLES.decision ? REGLES.decision(R) : (data.decision || '');
     const filiere = classe.option || classe.option_faculte || classe.faculte || '';
     return `<div class="bulletin releve${R.lignes.length > 22 ? ' dense' : ''}">
-<header class="entete"><div class="logo"><img src="${esc(etab.logo || 'logo-etab.jpeg')}" alt=""></div>
-<div class="titre"><div class="inst">${esc(String(etab.nom || '').toUpperCase())}</div>${etab.sigle ? `<div class="sigle">${esc(etab.sigle)}</div>` : ''}
-<div class="rdc">REPUBLIQUE DEMOCRATIQUE DU CONGO</div>${filiere ? `<div>Section : ${esc(filiere)}</div>` : ''}
-<div class="rel">RELEVE DE NOTES</div><div class="presc">${esc(classe.nom || '')} - ${REGLES.libelleSections}</div></div>
-<div class="photo">${photo}</div></header>
-<section class="identite"><div class="ligne"><span><b>Année universitaire :</b> ${esc(annee)}</span></div>
-<div class="ligne"><span><b>Nom :</b> ${esc([eleve.nom, eleve.postnom, eleve.prenom].filter(Boolean).join(' '))}</span></div>
-<div class="ligne"><span><b>Matricule :</b> ${esc(eleve.matricule || '')}</span><span><b>Né(e) à :</b> ${esc(lieu)}, le ${esc(naiss)}</span><span><b>Sexe :</b> ${esc(eleve.sexe || '')}</span></div>
-<div class="ligne"><span><b>Domaine :</b> ${esc(classe.domaine || '')}</span><span><b>Filière :</b> ${esc(filiere)}</span></div></section>
+<div class="rentete"><div class="rlogo"><img src="${esc(etab.logo || 'logo-etab.jpeg')}" alt="" onerror="this.style.display='none'"></div>
+<div class="rtitre"><div class="rinst">${esc(String(etab.nom || '').toUpperCase())}</div>${etab.sigle ? `<div class="rsigle">${esc(etab.sigle)}</div>` : ''}
+<div class="rrdc">REPUBLIQUE DEMOCRATIQUE DU CONGO</div>${filiere ? `<div>Section : ${esc(filiere)}</div>` : ''}
+<div class="rrel">RELEVE DE NOTES</div><div class="rpresc">${esc(classe.nom || '')} - ${REGLES.libelleSections}</div></div>
+<div class="rphoto">${photo}</div></div>
+<div class="ridentite"><div class="rligne"><span><b>Année universitaire :</b> ${esc(annee)}</span></div>
+<div class="rligne"><span><b>Nom :</b> ${esc([eleve.nom, eleve.postnom, eleve.prenom].filter(Boolean).join(' '))}</span></div>
+<div class="rligne"><span><b>Matricule :</b> ${esc(eleve.matricule || '')}</span><span><b>Né(e) à :</b> ${esc(lieu)}, le ${esc(naiss)}</span><span><b>Sexe :</b> ${esc(eleve.sexe || '')}</span></div>
+<div class="rligne"><span><b>Domaine :</b> ${esc(classe.domaine || '')}</span><span><b>Filière :</b> ${esc(filiere)}</span></div></div>
 <h2>Unités d'enseignement (UE) et Eléments constitutifs de l'UE (ECUE)</h2>
 <table><colgroup><col style="width:5%"><col style="width:13%"><col style="width:30%"><col style="width:8%"><col style="width:8%"><col style="width:9%"><col style="width:10%"><col style="width:8%"><col style="width:9%"></colgroup>
 <thead><tr><th rowspan="2">N°</th><th rowspan="2">CODE DE L'UE / ECUE</th><th rowspan="2">MATIERES</th><th rowspan="2">VH</th><th rowspan="2">Crédits</th><th colspan="4">Résultats obtenus</th></tr>
 <tr><th>notes sur 20</th><th>notes Pondérées</th><th>Validité</th><th>CR VALIDES</th></tr></thead>
 <tbody>${lignes}</tbody>
-<tfoot><tr class="total"><td colspan="3">total</td><td>${fr(R.vh)}</td><td>${fr(R.crTot)}</td><td></td><td>${fr(R.pond, 1)}</td><td></td><td>${fr(R.crVal)}</td></tr></tfoot></table>
-<section class="bas"><dl class="resume">
+<tfoot><tr class="rtotal"><td colspan="3">total</td><td>${fr(R.vh)}</td><td>${fr(R.crTot)}</td><td></td><td>${fr(R.pond, 1)}</td><td></td><td>${fr(R.crVal)}</td></tr></tfoot></table>
+<div class="rbas"><dl class="rresume">
 <dt>Total volume Horaire Annuel :</dt><dd>${fr(R.vh)}</dd><dt>Nombre total de Crédit Annuel :</dt><dd>${fr(R.crTot)}</dd>
 <dt>Crédits Validés :</dt><dd>${fr(R.crVal)}</dd><dt>Moyenne annuelle :</dt><dd>${fr(R.moyenne, 2)}</dd>
 <dt>Mention Obtenue :</dt><dd>${esc(R.mention)}</dd><dt>Décision de Jury :</dt><dd>${esc(decision)}</dd></dl>
-<div class="signature">Le Chef de Section P.O<br><div class="parafe"></div>${esc(etab.signataire || etab.chef_section || '')}</div></section>
-<div class="legende"><span>NV: Crédit Non Validé</span><span>V: crédit Validé</span><span>VH: volume horaire</span><span>Vc : crédit Validé par Compensation</span></div>
-<p class="nb">N.B. : Ce relevé est délivré sans rature ni surcharge et certifié exact d'après les grilles du Premier &amp; Deuxième Semestre</p></div>`;
+<div class="rsignature">Le Chef de Section P.O<br><div class="rparafe"></div>${esc(etab.signataire || etab.chef_section || '')}</div></div>
+<div class="rlegende"><span>NV: Crédit Non Validé</span><span>V: crédit Validé</span><span>VH: volume horaire</span><span>Vc : crédit Validé par Compensation</span></div>
+<p class="rnb">N.B. : Ce relevé est délivré sans rature ni surcharge et certifié exact d'après les grilles du Premier &amp; Deuxième Semestre</p></div>`;
   }
 
   /* ---------- Branchement sur BULLETIN ---------- */
@@ -132,17 +133,83 @@
     s.style.transform = 'scale(' + k + ')'; w.style.width = (794 * k) + 'px'; w.style.height = (1123 * k) + 'px';
   }
 
+  /* ---------- Téléchargement direct en PDF (jsPDF + html2canvas, comme « Tous les bulletins ») ---------- */
+  const chargerLib = (src, ok) => new Promise(res => {
+    if (ok()) return res(true);
+    const s = document.createElement('script');
+    s.src = src; s.onload = () => res(ok()); s.onerror = () => res(false);
+    document.head.appendChild(s);
+  });
+  const libsPdf = async () =>
+    await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(global.jspdf && global.jspdf.jsPDF)) &&
+    await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => typeof global.html2canvas === 'function');
+
+  function infoBulle(txt) {                       // petit message à l'écran pendant la création
+    let b = document.getElementById('releve-info');
+    if (!txt) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('div'); b.id = 'releve-info'; b.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111;color:#fff;padding:12px 18px;border-radius:10px;font:600 14px Arial,sans-serif;z-index:100000;max-width:90%;text-align:center'; document.body.appendChild(b); }
+    b.textContent = txt;
+  }
+
+  async function telechargerPDF(d) {
+    const e = d.eleve || {};
+    const fichier = ('Releve_' + [e.nom, e.postnom, e.prenom].filter(Boolean).join('_') + '_' + (d.annee || '')).replace(/[\\/:*?"<>|\s]+/g, '_').replace(/_+$/, '') + '.pdf';
+    infoBulle('⏳ Création du PDF du relevé…');
+    try {
+      if (!(await libsPdf())) throw new Error('Module PDF indisponible (connexion nécessaire la première fois).');
+      injecterCss();
+      const h = document.createElement('div');
+      h.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff';
+      h.innerHTML = renderReleve(d);
+      document.body.appendChild(h);
+      try {
+        const el = h.firstElementChild;
+        el.style.height = 'auto'; el.style.overflow = 'visible';            // relevé long : on mesure tout le contenu
+        await new Promise(r => setTimeout(r, 120));
+        const H = Math.max(1123, el.scrollHeight), echelle = innerWidth < 800 ? 1.5 : 2;
+        const prendre = () => global.html2canvas(h, { scale: echelle, backgroundColor: '#ffffff', useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 794, width: 794, height: H });
+        let cv = await prendre();
+        try { cv.toDataURL('image/jpeg', .9); }                              // image externe bloquée ? on refait sans images
+        catch (_) { h.querySelectorAll('img').forEach(i => i.remove()); cv = await prendre(); }
+        const { jsPDF } = global.jspdf, pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+        pdf.setProperties({ title: 'Relevé de notes ' + [e.nom, e.postnom, e.prenom].filter(Boolean).join(' ') });
+        const pageH = Math.round(cv.width * 297 / 210), pages = Math.max(1, Math.ceil(cv.height / pageH));
+        for (let p = 0; p < pages; p++) {                                    // coupe en pages A4 si le relevé est long
+          const hh = Math.min(pageH, cv.height - p * pageH), part = document.createElement('canvas');
+          part.width = cv.width; part.height = hh;
+          const cx = part.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, part.width, part.height);
+          cx.drawImage(cv, 0, p * pageH, cv.width, hh, 0, 0, cv.width, hh);
+          if (p > 0) pdf.addPage();
+          pdf.addImage(part.toDataURL('image/jpeg', .92), 'JPEG', 0, 0, 210, 297 * hh / pageH, undefined, 'FAST');
+        }
+        pdf.save(fichier);
+      } finally { h.remove(); }
+      infoBulle('✅ ' + fichier); setTimeout(() => infoBulle(''), 3500);
+      return true;
+    } catch (err) {
+      console.error(err); infoBulle('');
+      throw err;
+    }
+  }
+
+  /* Aperçu + impression (secours si le PDF direct est impossible, ex. hors connexion la 1ère fois) */
+  function apercu(d) {
+    injecterCss();
+    let ov = document.getElementById('bulletinOverlay');
+    if (!ov) { ov = document.createElement('div'); ov.id = 'bulletinOverlay'; ov.className = 'bulletin-overlay'; document.body.appendChild(ov); }
+    ov.innerHTML = `<div class="bo-bar"><button onclick="BULLETIN.pdfReleve(window.__releveData)">⬇ Télécharger le PDF</button><button class="sec" onclick="window.print()">🖨 Imprimer</button><button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button></div><div class="bo-wrap"><div class="bo-sheet">${renderReleve(d)}</div></div>`;
+    global.__releveData = d;
+    ov.classList.add('show'); ajuster(); window.scrollTo(0, 0);
+  }
+
   B.MODELES_UNIV = MODELES; B.REGLES_UNIV = REGLES;
+  B.pdfReleve = d => telechargerPDF(d).catch(err => alert('Création du PDF impossible : ' + (err && err.message || err)));
   B.estDisponible = c => estUniv(c) ? true : (vieux.dispo ? vieux.dispo(c) : false);
   B.render = d => { if (estUniv(d.classe)) { injecterCss(); return renderReleve(d); } return vieux.render(d); };
   B.ouvrir = d => {
     if (!estUniv(d && d.classe)) return vieux.ouvrir(d);
-    injecterCss();
-    let ov = document.getElementById('bulletinOverlay');
-    if (!ov) { ov = document.createElement('div'); ov.id = 'bulletinOverlay'; ov.className = 'bulletin-overlay'; document.body.appendChild(ov); }
-    ov.innerHTML = `<div class="bo-bar"><button onclick="window.print()">🖨 Imprimer / PDF</button><button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button></div><div class="bo-wrap"><div class="bo-sheet">${renderReleve(d)}</div></div>`;
-    ov.classList.add('show'); ajuster(); window.scrollTo(0, 0);
-    return true;
+    /* Relevé universitaire : téléchargement direct en PDF ; sinon aperçu avec boutons PDF / impression */
+    return telechargerPDF(d).catch(err => { console.error(err); apercu(d); });
   };
   addEventListener('resize', ajuster);
   if (typeof B.MOTIF === 'string') B.MOTIF = B.MOTIF.replace(/\.$/, '') + ' ; ' + MODELES['REL-UNIV'].label + '.';
