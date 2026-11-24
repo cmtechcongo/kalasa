@@ -10,6 +10,11 @@
 .bul table{width:100%;border-collapse:collapse;margin:12px 0}
 .bul th,.bul td{border:1px solid #000;padding:6px;text-align:center;font-size:.9rem}
 .bul td:first-child{text-align:left}
+/* Relevés : aperçu des points */
+.xt{overflow-x:auto}
+.xt table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:8px}
+.xt th,.xt td{padding:6px 4px;text-align:left;border-bottom:1px solid #8883}
+.xt th:first-child,.xt td:first-child{width:34px;text-align:right}
 /* Bulletins : aperçu groupé (une page A4 par bulletin à l'impression) */
 .pgb{break-after:page;page-break-after:always}
 .pgb:last-child{break-after:auto;page-break-after:auto}
@@ -22,79 +27,104 @@
 <div class="warn" id="warn"></div>
 <div class="card" id="wr" style="display:none;border-left:4px solid #b91c1c"></div>
 <div class="card">
-  <div id="ctx" style="font-size:.9rem;opacity:.8;margin-bottom:8px"></div>
-  <label>Classe</label><select id="classe"></select>
+<div id="ctx" style="font-size:.9rem;opacity:.8;margin-bottom:8px"></div>
+<label>Classe</label><select id="classe"></select>
 </div>
 <div class="tabs">
-  <button id="tM" class="on" onclick="tab('M')">📚 Matières</button>
-  <button id="tS" onclick="tab('S')">✍ Saisie</button>
-  <button id="tB" onclick="tab('B')">📄 Bulletins</button>
-  <button id="tP" onclick="tab('P')" style="display:none">🔐 Périodes</button>
+<button id="tM" class="on" onclick="tab('M')">📚 Matières</button>
+<button id="tS" onclick="tab('S')">✍ Saisie</button>
+<button id="tB" onclick="tab('B')">📄 Bulletins</button>
+<button id="tR" onclick="tab('R')">📊 Relevés</button>
+<button id="tP" onclick="tab('P')" style="display:none">🔐 Périodes</button>
 </div>
-
 <section id="pM">
-  <form class="card" id="fm" onsubmit="okMat(event)">
-    <h2 id="tm">Nouvelle matière</h2>
-    <label>Matière *</label><input id="mn" required>
-    <div class="g">
-      <div><label>Coefficient *</label><input id="mc" type="number" min="1" value="1" required></div>
-      <div><label>Note maximale *</label><input id="mx" type="number" min="1" value="20" required></div>
-    </div>
-    <label>Enseignant qui donne ce cours * <small>(un seul par matière)</small></label><select id="me" required></select>
-    <div class="acts"><button>Enregistrer</button><button type="button" class="sec" id="ma" style="display:none" onclick="resetMat()">Annuler</button></div>
-  </form>
-  <div id="lm"></div>
+<form class="card" id="fm" onsubmit="okMat(event)">
+<h2 id="tm">Nouvelle matière</h2>
+<label>Matière *</label><input id="mn" required>
+<div class="g">
+<div><label>Coefficient *</label><input id="mc" type="number" min="1" value="1" required></div>
+<div><label>Note maximale *</label><input id="mx" type="number" min="1" value="20" required></div>
+</div>
+<label>Enseignant qui donne ce cours * <small>(un seul par matière)</small></label><select id="me" required></select>
+<div class="acts"><button>Enregistrer</button><button type="button" class="sec" id="ma" style="display:none" onclick="resetMat()">Annuler</button></div>
+</form>
+<div id="lm"></div>
 </section>
-
 <section id="pS" style="display:none">
-  <div class="card">
-    <div class="g">
-      <div><label>Matière</label><select id="sm" onchange="$('rech').value='';rSaisie(false)"></select></div>
-      <div><label>Période</label><select id="sp" onchange="$('rech').value='';rSaisie(false)"></select></div>
-    </div>
-    <div id="smoy" style="margin-top:10px"></div>
-  </div>
-  <div class="card">
-    <label>🔍 Recherche rapide (nom ou matricule)</label>
-    <input id="rech" type="search" placeholder="Tapez un nom ou un matricule…" autocomplete="off" oninput="filtrSaisie()">
-    <div id="rechInfo" style="margin-top:6px;font-size:.85rem;color:#555"></div>
-  </div>
-  <div id="ls"></div>
+<div class="card">
+<div class="g">
+<div><label>Matière</label><select id="sm" onchange="$('rech').value='';rSaisie(false)"></select></div>
+<div><label>Période</label><select id="sp" onchange="$('rech').value='';rSaisie(false)"></select></div>
+</div>
+<div id="smoy" style="margin-top:10px"></div>
+</div>
+<div class="card">
+<label>🔍 Recherche rapide (nom ou matricule)</label>
+<input id="rech" type="search" placeholder="Tapez un nom ou un matricule…" autocomplete="off" oninput="filtrSaisie()">
+<div id="rechInfo" style="margin-top:6px;font-size:.85rem;color:#555"></div>
+</div>
+<div id="ls"></div>
 </section>
-
 <section id="pB" style="display:none">
-  <div class="card">
-    <label>Période</label><select id="bp" onchange="rBull()"></select>
-
-    <label>🔍 Rechercher un bulletin (nom ou matricule)</label>
-    <input id="rechB" type="search" placeholder="Ex : Kasongo Jean ou 2026-0012" autocomplete="off" oninput="filtrBull()" onkeydown="if(event.key==='Enter'){event.preventDefault();ouvrirTrouve()}">
-    <div id="rechBInfo" role="status" aria-live="polite" style="margin-top:6px;font-size:.85rem;min-height:1.2em"></div>
-
-    <div class="acts">
-      <button id="bPdf" onclick="pdfBulletins()">⬇ Tous les bulletins (PDF)</button>
-      <button class="sec" onclick="exportCl()">⬇ Classement (CSV)</button>
-    </div>
-    <div id="bEtat" role="status" aria-live="polite" style="margin-top:8px;font-size:.85rem;min-height:1.2em"></div>
-  </div>
-  <div id="lb"></div>
+<div class="card">
+<label>Période</label><select id="bp" onchange="rBull()"></select>
+<label>🔍 Rechercher un bulletin (nom ou matricule)</label>
+<input id="rechB" type="search" placeholder="Ex : Kasongo Jean ou 2026-0012" autocomplete="off" oninput="filtrBull()" onkeydown="if(event.key==='Enter'){event.preventDefault();ouvrirTrouve()}">
+<div id="rechBInfo" role="status" aria-live="polite" style="margin-top:6px;font-size:.85rem;min-height:1.2em"></div>
+<div class="acts">
+<button id="bPdf" onclick="pdfBulletins()">⬇ Tous les bulletins (PDF)</button>
+<button class="sec" onclick="exportCl()">⬇ Classement (CSV)</button>
+</div>
+<div id="bEtat" role="status" aria-live="polite" style="margin-top:8px;font-size:.85rem;min-height:1.2em"></div>
+</div>
+<div id="lb"></div>
+</section>
+<section id="pR" style="display:none">
+<div class="card">
+<h2>📊 Liste des élèves et points obtenus</h2>
+<div class="g">
+<div><label>Année scolaire</label><select id="xa" onchange="xMajClasses()"></select></div>
+<div><label>Classe</label><select id="xc" onchange="xChargerClasse()"></select></div>
+</div>
+<label>Critère</label>
+<select id="xm" onchange="xMode()">
+<option value="1">1 · Une période et une matière</option>
+<option value="2">2 · Toutes les périodes et toutes les matières</option>
+</select>
+<div class="g" id="x1">
+<div><label>Période</label><select id="xp" onchange="xRefresh()"></select></div>
+<div><label>Matière</label><select id="xmat" onchange="xRefresh()"></select></div>
+</div>
+<div class="acts">
+<button id="xpdf" onclick="xPdf()">📄 Télécharger PDF</button>
+<button class="sec" id="xcsv" onclick="xCsv()">⬇ Excel (CSV)</button>
+</div>
+<div id="xEtat" role="status" aria-live="polite" style="margin-top:8px;font-size:.85rem;min-height:1.2em"></div>
+</div>
+<div class="card xt" id="xApercu"></div>
 </section>
 <section id="pP" style="display:none">
-  <div class="card"><h2>Périodes de l'année scolaire</h2>
-  <p style="font-size:.9rem;color:#555">Désactivez la modification des notes d'une période terminée : plus aucune note de cette période ne peut être saisie, changée ou effacée tant qu'elle n'est pas réactivée. Chaque changement est enregistré dans le journal d'audit.</p></div>
-  <div id="lp"></div>
+<div class="card"><h2>Périodes de l'année scolaire</h2>
+<p style="font-size:.9rem;color:#555">Désactivez la modification des notes d'une période terminée : plus aucune note de cette période ne peut être saisie, changée ou effacée tant qu'elle n'est pas réactivée. Chaque changement est enregistré dans le journal d'audit.</p></div>
+<div id="lp"></div>
 </section>
 </main>
 <div class="over bul" id="bul"></div>
 
+
 <script src="bulletin-modele.js"></script>
+<script src="bulletin-primaire.js"></script>
+<script src="bulletin-univ.js"></script>
+
+
+
 <script type="module">
 import { sb, exigerSession } from './kalasa-db.js';
-
 const C = await exigerSession(['admin', 'directeur', 'secretaire', 'enseignant']);
 if (!C) throw new Error('Session requise');
 const ETAB = C.etabId;
 const GERE = ['admin', 'directeur'].includes(C.role);   // direction : tout
-const ENS = C.role === 'enseignant';                     // enseignant : ses matières uniquement
+const ENS = C.role === 'enseignant';                      // enseignant : ses matières uniquement
 
 /* ---------- Outils ---------- */
 const $ = i => document.getElementById(i);
@@ -129,8 +159,7 @@ window.KAUDIT = { log: auditer };
 /* ---------- État ---------- */
 let ANNEES = [], CLASSES = [], INS = [], MAT = [], ENSL = [], VER = {}, N = {};
 let ETAB_ROW = {}, ANNEE = '', eid = null, T = 'M';
-let TIT = {};                 // classe → enseignant titulaire (Maternelle → Terminal), chargé pour la direction
-let MES_FICHES = new Set();   // fiches Personnel reliées au compte connecté
+let MES_FICHES = new Set();                 // fiches Personnel reliées au compte connecté
 const cid = () => $('classe').value;
 const cl = id => CLASSES.find(c => c.id === id);
 const elevesDe = id => INS.filter(e => e.classe_id === id);
@@ -141,7 +170,6 @@ const peutNoter = m => !!m && (GERE || (ENS && MES_FICHES.has(m.ens)));
 const matsSaisie = () => mats().filter(peutNoter);
 const ouverte = p => !(VER[p] || {}).ferme;
 const dispo = () => { const c = cl(cid()); return !!c && BULLETIN.estDisponible(c); };
-
 function anneeCourante() {
   let k = null; try { k = (JSON.parse(localStorage.getItem('kalasa_ctx')) || {}).annee; } catch (_) {}
   if (k && ANNEES.some(a => a.id === k)) return k;
@@ -149,22 +177,19 @@ function anneeCourante() {
 }
 
 /* ---------- Périodes selon le niveau de la classe ---------- */
-const PER_SEM = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 1er semestre'],['P3','3ème période'],['P4','4ème période'],['EX2','Examen 2ème semestre']];   // Cycle terminal · Humanité (et classes sans niveau)
-const PER_TRI = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 1er trimestre'],['P3','3ème période'],['P4','4ème période'],['EX2','Examen 2ème trimestre'],['P5','5ème période'],['P6','6ème période'],['EX3','Examen 3ème trimestre']];   // Maternelle → Terminal
-const PER_UNI = [['S1','1ère section'],['S2','2ème section']];   // Université
+const PER_SEM = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 1er semestre'],['P3','3ème période'],['P4','4ème période'],['EX2','Examen 2ème semestre']]; // Cycle terminal · Humanité (et classes sans niveau)
+const PER_TRI = [['P1','1ère période'],['P2','2ème période'],['EX1','Examen 1er trimestre'],['P3','3ème période'],['P4','4ème période'],['EX2','Examen 2ème trimestre'],['P5','5ème période'],['P6','6ème période'],['EX3','Examen 3ème trimestre']]; // Maternelle → Terminal
+const PER_UNI = [['S1','1ère section'],['S2','2ème section']]; // Université
 const NIV_NORM = { 'Maternel': 'Maternelle', 'Elémentaire': 'Élémentaire' };
-const NIV_TRI = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Primaire'];   // un seul enseignant par classe
+const NIV_TRI = ['Maternelle', 'Élémentaire', 'Moyen', 'Terminal', 'Primaire'];
 const niveauDe = c => c ? (NIV_NORM[c.type] || c.type || (optDe(c) ? 'Humanité' : '')) : '';
 const perDe = c => { const n = niveauDe(c); return n === 'Université' ? PER_UNI : NIV_TRI.includes(n) ? PER_TRI : PER_SEM; };
-const classeUnique = () => NIV_TRI.includes(niveauDe(cl(cid())));
 let PER = PER_SEM;
-
 const mention = m => m >= 16 ? 'Très bien' : m >= 14 ? 'Bien' : m >= 12 ? 'Assez bien' : m >= 10 ? 'Passable' : 'Insuffisant';
 const coul = m => m >= 14 ? 'bon' : m >= 10 ? 'moy' : 'bas';
 const cle1 = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-function tab(t) { T = t; ['M','S','B','P'].forEach(x => { $('p' + x).style.display = x === t ? 'block' : 'none'; $('t' + x).className = x === t ? 'on' : ''; }); rendu(); }
-function rendu() { PER = perDe(cl(cid())); T === 'M' ? rMat() : T === 'S' ? rSaisie() : T === 'P' ? rPer() : rBull(); }
+function tab(t) { T = t; ['M','S','B','R','P'].forEach(x => { $('p' + x).style.display = x === t ? 'block' : 'none'; $('t' + x).className = x === t ? 'on' : ''; }); rendu(); }
+function rendu() { PER = perDe(cl(cid())); T === 'M' ? rMat() : T === 'S' ? rSaisie() : T === 'P' ? rPer() : T === 'R' ? rReleve() : rBull(); }
 
 /* ---------- Chargement ---------- */
 async function chargerNotes() {
@@ -177,7 +202,6 @@ async function chargerNotes() {
     l.forEach(r => { (N[r.matiere_id + '_' + r.periode] ??= {})[r.inscription_id] = +r.valeur; });
   } catch (x) { erreur('Lecture des notes impossible : ' + esc(mess(x))); }
 }
-
 async function init() {
   if (!ETAB) return erreur('Aucun établissement disponible.');
   try {
@@ -197,29 +221,17 @@ async function init() {
     INS = insc; MAT = matieres.map(versMat); ENSL = ens; ETAB_ROW = etabs[0] || {};
     MES_FICHES = new Set(ENSL.filter(p => p.utilisateur_id === C.id).map(p => p.id));
     VER = {}; verrous.forEach(v => { VER[v.periode] = { ferme: v.ferme, par: v.par, le: v.le }; });
-
-    /* Titulaires de classe (Maternelle → Terminal) : lus par la direction pour attribuer les matières */
-    TIT = {};
-    if (GERE) {
-      try {
-        (await lire(sb.from('personnel').select('id, classe_id').eq('etablissement_id', ETAB).not('classe_id', 'is', null)))
-          .forEach(p => { TIT[p.classe_id] = p.id; });
-      } catch (_) {}
-    }
-
     $('ctx').textContent = '🏫 ' + (ETAB_ROW.nom || '') + ' · Année ' + ((ANNEES.find(a => a.id === ANNEE) || {}).lib || '');
-    const visibles = CLASSES;   // la base ne renvoie déjà que les classes de l'enseignant connecté
+    const visibles = ENS ? CLASSES.filter(c => MAT.some(m => m.classe === c.id && MES_FICHES.has(m.ens))) : CLASSES;
     $('classe').innerHTML = visibles.map(c => `<option value="${esc(c.id)}">${esc(c.nom + (c.option ? ' · ' + c.option : ''))}</option>`).join('')
       || '<option value="">Aucune classe</option>';
     avertir([[!CLASSES.length, '<a href="classe.html">des classes</a>'], [!INS.length, '<a href="eleve.html">des élèves</a>']]);
-
     $('tP').style.display = GERE ? '' : 'none';
     let m = '';
     if (!GERE && !ENS) m = '⚠ Profil en lecture seule.';
     else if (ENS && !MES_FICHES.size) m = '⚠ Aucune fiche Personnel n\'est reliée à votre compte : demandez à la direction de relier votre fiche à votre compte utilisateur.';
     else if (ENS && !MAT.some(x => MES_FICHES.has(x.ens))) m = '⚠ Aucune matière ne vous est attribuée : demandez à la direction de vous l\'attribuer.';
     if (m) { $('wr').style.display = 'block'; $('wr').textContent = m; }
-
     await chargerNotes();
     rendu();
   } catch (x) {
@@ -233,17 +245,13 @@ async function okMat(e) {
   if (!GERE) return alert('Réservé à la direction.');
   if (!cid()) return alert('Choisissez une classe.');
   const d = { nom: $('mn').value.trim(), coef: +$('mc').value, max: +$('mx').value, ens: $('me').value };
-  /* Maternelle → Terminal : l'enseignant est celui de la classe (imposé) */
-  const uniq = classeUnique();
-  if (uniq && !TIT[cid()]) return alert('Aucun enseignant n\'est assigné à cette classe : assignez-le d\'abord dans la page Personnel.');
-  if (uniq) d.ens = TIT[cid()];
   if (!d.ens) return alert('Attribuez cette matière à un enseignant.');
   const dbl = mats().find(x => x.id !== eid && cle1(x.nom) === cle1(d.nom));
   if (dbl) return alert('Refusé : « ' + dbl.nom + ' » existe déjà dans cette classe' + (dbl.ens ? ' (attribuée à ' + nomEns(dbl.ens) + ')' : '') + '. Une matière ne peut être attribuée qu\'à un seul enseignant.');
   const P = ENSL.find(x => x.id === d.ens);
   if (!P) return alert('Enseignant introuvable pour cet établissement.');
   const liste = String(P.matiere || '').split(/[,;\/]/).map(cle1).filter(Boolean), n = cle1(d.nom);
-  if (!uniq && liste.length && !liste.some(x => n.includes(x) || x.includes(n)))
+  if (liste.length && !liste.some(x => n.includes(x) || x.includes(n)))
     return alert('Refusé : « ' + d.nom + ' » ne figure pas dans les matières enseignées par ' + P.nom_complet + ' (fiche Personnel).');
   const ligne = { nom: d.nom, coef: d.coef, note_max: d.max, personnel_id: d.ens };
   try {
@@ -264,7 +272,7 @@ async function okMat(e) {
     else erreur('Enregistrement impossible : ' + esc(mess(x)));
   }
 }
-function resetMat() { $('mn').value = ''; $('mc').value = 1; $('mx').value = 20; $('me').value = classeUnique() ? (TIT[cid()] || '') : ''; eid = null; $('tm').textContent = 'Nouvelle matière'; $('ma').style.display = 'none'; }
+function resetMat() { $('mn').value = ''; $('mc').value = 1; $('mx').value = 20; $('me').value = ''; eid = null; $('tm').textContent = 'Nouvelle matière'; $('ma').style.display = 'none'; }
 function editMat(id) {
   const m = MAT.find(x => x.id === id); if (!m) return;
   $('mn').value = m.nom; $('mc').value = m.coef; $('mx').value = m.max; $('me').value = m.ens || '';
@@ -286,16 +294,13 @@ function rEns() {
   const c = $('me').value;
   $('me').innerHTML = '<option value="">— Choisir l\'enseignant —</option>' +
     ENSL.map(p => `<option value="${esc(p.id)}">${esc(p.nom_complet)}${p.matiere ? ' · ' + esc(p.matiere) : ''}</option>`).join('');
-  const uniq = classeUnique();
-  $('me').disabled = uniq;                       // Maternelle → Terminal : enseignant imposé par la classe
-  $('me').value = uniq ? (TIT[cid()] || '') : c;
+  $('me').value = c;
 }
 function rMat() {
   $('fm').style.display = GERE ? '' : 'none'; rEns();
   const l = GERE ? mats() : matsSaisie();
   const aide = GERE && !ENSL.length ? '<p class="vide">Aucun enseignant : ajoutez-en dans la page <a href="personnel.html">Personnel</a> pour cet établissement.</p>' : '';
-  const aideTit = GERE && classeUnique() && !TIT[cid()] ? '<p class="vide">Aucun enseignant n\'est assigné à cette classe : assignez-le dans la page <a href="personnel.html">Personnel</a> avant de créer les matières.</p>' : '';
-  $('lm').innerHTML = aide + aideTit + (l.length ? l.map(m => `<div class="card el"><div class="info"><b>${esc(m.nom)}</b><small>Coef ${m.coef} · sur ${m.max} · 👤 ${esc(nomEns(m.ens) || 'Non attribué')}</small></div>
+  $('lm').innerHTML = aide + (l.length ? l.map(m => `<div class="card el"><div class="info"><b>${esc(m.nom)}</b><small>Coef ${m.coef} · sur ${m.max} · 👤 ${esc(nomEns(m.ens) || 'Non attribué')}</small></div>
     ${GERE ? `<div class="b"><button class="sec" onclick="editMat('${m.id}')">✎</button><button class="del" onclick="delMat('${m.id}')">✕</button></div>` : ''}</div>`).join('') :
     `<p class="vide">${GERE ? 'Aucune matière pour cette classe' : 'Aucune matière ne vous est attribuée dans cette classe : la direction doit vous l\'attribuer'}</p>`);
 }
@@ -481,7 +486,10 @@ const chargerLib = (src, ok) => new Promise(res => {
 const libsPdf = async () =>
   await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF)) &&
   await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => typeof window.html2canvas === 'function');
-
+const libsTable = async () =>
+  await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF)) &&
+  await chargerLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
+    () => !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable));
 function assurerCssBulletin(id) {
   if (document.getElementById('bulletin-modele-css')) return;
   bulletin(id);
@@ -507,7 +515,6 @@ function imprimerGroupe(pages, titre) {
   document.body.appendChild(ov);
   ajusterGroupe(); ov.scrollTop = 0;
 }
-
 async function pdfBulletins() {
   const btn = $('bPdf'), etat = $('bEtat');
   if (!cid()) return alert('Choisissez une classe.');
@@ -555,17 +562,239 @@ async function pdfBulletins() {
     etat.textContent = '❌ Échec de la création du PDF : ' + (err && err.message || err); etat.className = 'bas';
   } finally { btn.disabled = false; }
 }
-
 function exportCl() {
   const { liste } = classement($('bp').value); if (!liste.length) return alert('Rien à exporter');
   telecharger('classement.csv', ['Rang', 'Matricule', 'Élève', 'Moyenne /20', 'Mention'],
     liste.map(x => [x.m === null ? '' : x.rang, x.e.matricule, nom(x.e), x.m === null ? '' : x.m.toFixed(2), x.m === null ? '' : mention(x.m)].map(q).join(';')));
 }
 
+/* ---------- Relevés : liste des élèves et points obtenus (PDF / Excel) ---------- */
+let X = null, XCL = [], xTok = 0;
+const xAn = () => ANNEES.find(a => a.id === $('xa').value) || {};
+const xTitreClasse = c => c.nom + (optDe(c) ? ' · ' + optDe(c) : '');
+const xNomClasse = c => c.nom + (optDe(c) ? ' ' + optDe(c) : '');
+const xNum = v => String(Math.round(v * 100) / 100).replace('.', ',');
+const xDec = v => v.toFixed(2).replace('.', ',');
+const xFichier = s => s.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+const xVal = (m, p, id) => (X.notes[m.id + '_' + p] || {})[id];
+const xTri = () => [...X.ins].sort((a, b) => nom(a).localeCompare(nom(b), 'fr'));
+const xPerLib = p => (X.per.find(x => x[0] === p) || [])[1] || p;
+const xPerAvecNotes = () => X.per.filter(([k]) => X.mat.some(m => X.notes[m.id + '_' + k]));
+function xMoyP(id, p) {
+  let pts = 0, co = 0;
+  X.mat.forEach(m => { const v = xVal(m, p, id); if (v !== undefined) { pts += v / m.max * 20 * m.coef; co += m.coef; } });
+  return co ? pts / co : null;
+}
+function xMoyA(id) {
+  const a = X.per.map(([k]) => xMoyP(id, k)).filter(x => x !== null);
+  return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+}
+/* Classement annuel : liste triée (rang, puis sans notes) */
+function xClassement() {
+  const l = X.ins.map(e => ({ e, m: xMoyA(e.id) }));
+  const s = l.filter(x => x.m !== null).sort((a, b) => b.m - a.m || nom(a.e).localeCompare(nom(b.e), 'fr'));
+  s.forEach((x, i) => x.rang = i > 0 && x.m === s[i - 1].m ? s[i - 1].rang : i + 1);
+  return [...s, ...l.filter(x => x.m === null).sort((a, b) => nom(a.e).localeCompare(nom(b.e), 'fr'))];
+}
+
+async function rReleve() {
+  if (!$('xa').options.length) {
+    $('xa').innerHTML = opts(ANNEES, a => a.lib); $('xa').value = ANNEE;
+    await xMajClasses();
+  } else xRefresh();
+}
+async function xMajClasses() {
+  const a = $('xa').value, cur = $('xc').value;
+  try {
+    let l = await lire(sb.from('classes').select('*').eq('etablissement_id', ETAB).eq('annee_id', a).order('nom'));
+    if (ENS) {
+      const mes = [...MES_FICHES];
+      const mm = mes.length ? await lire(sb.from('matieres').select('classe_id').in('personnel_id', mes)) : [];
+      const ok = new Set(mm.map(x => x.classe_id));
+      l = l.filter(c => ok.has(c.id));
+    }
+    XCL = l.map(c => ({ ...c, option: optDe(c), type: c.type || c.niveau || '' }))
+      .sort((x, y) => String(x.nom).localeCompare(String(y.nom), 'fr', { numeric: true }));
+  } catch (x) { erreur('Lecture des classes impossible : ' + esc(mess(x))); XCL = []; }
+  $('xc').innerHTML = XCL.length ? opts(XCL, c => xTitreClasse(c)) : '<option value="">Aucune classe pour cette année</option>';
+  const defaut = XCL.some(c => c.id === cur) ? cur : XCL.some(c => c.id === cid()) ? cid() : (XCL[0] || {}).id || '';
+  $('xc').value = defaut;
+  await xChargerClasse();
+}
+async function xChargerClasse() {
+  const t = ++xTok, a = $('xa').value, id = $('xc').value;
+  X = null; $('xEtat').textContent = '';
+  if (id) {
+    try {
+      const c = XCL.find(x => x.id === id);
+      const [ins, mat] = await Promise.all([
+        tout((d, f) => sb.from('inscriptions').select('id, matricule, nom, postnom, prenom, sexe').eq('classe_id', id).order('nom').order('id').range(d, f)),
+        lire(sb.from('matieres').select('id, nom, coef, note_max').eq('classe_id', id).order('nom'))
+      ]);
+      const notes = {}, ids = mat.map(m => m.id);
+      if (ids.length) {
+        const l = await tout((d, f) => sb.from('notes').select('matiere_id, inscription_id, periode, valeur')
+          .eq('annee_id', a).in('matiere_id', ids).order('id').range(d, f));
+        l.forEach(r => { (notes[r.matiere_id + '_' + r.periode] ??= {})[r.inscription_id] = +r.valeur; });
+      }
+      if (t !== xTok) return;
+      X = { c, a, ins, notes, per: perDe(c), mat: mat.map(m => ({ id: m.id, nom: m.nom, coef: +m.coef || 1, max: +m.note_max || 20 })) };
+    } catch (x) { erreur('Lecture impossible : ' + esc(mess(x))); }
+  }
+  xRemplir();
+}
+function xRemplir() {
+  const pc = $('xp').value, mc = $('xmat').value;
+  if (X) {
+    $('xp').innerHTML = X.per.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
+    if (X.per.some(x => x[0] === pc)) $('xp').value = pc;
+    $('xmat').innerHTML = opts(X.mat, m => m.nom + ' (/' + m.max + ')');
+    if (X.mat.some(m => m.id === mc)) $('xmat').value = mc;
+  } else { $('xp').innerHTML = ''; $('xmat').innerHTML = ''; }
+  xRefresh();
+}
+function xMode() { $('x1').style.display = $('xm').value === '1' ? '' : 'none'; xRefresh(); }
+function xRefresh() {
+  const box = $('xApercu'), mode = $('xm').value, ok = !!X && X.ins.length > 0 && X.mat.length > 0;
+  $('xpdf').disabled = !ok; $('xcsv').disabled = !ok;
+  $('x1').style.display = mode === '1' ? '' : 'none';
+  if (!$('xc').value) { box.innerHTML = '<p class="vide">Choisissez une classe</p>'; return; }
+  if (!X) { box.innerHTML = ''; return; }
+  if (!X.ins.length) { box.innerHTML = '<p class="vide">Aucun élève dans cette classe</p>'; return; }
+  if (!X.mat.length) { box.innerHTML = '<p class="vide">Aucune matière dans cette classe</p>'; return; }
+  const t = xTri(), ent = `<b>${esc(xTitreClasse(X.c))}</b> · ${esc(xAn().lib || '')}`;
+  if (mode === '1') {
+    const m = X.mat.find(x => x.id === $('xmat').value), p = $('xp').value;
+    if (!m) { box.innerHTML = ''; return; }
+    const vals = t.map(e => xVal(m, p, e.id)).filter(v => v !== undefined);
+    const moyc = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    box.innerHTML = `<div>${ent}<br>${esc(m.nom)} · ${esc(xPerLib(p))} — ${vals.length}/${t.length} notes${moyc !== null ? ' · Moyenne : <b>' + xNum(moyc) + '</b> / ' + m.max : ''}</div>
+      <table><tr><th>N°</th><th>Matricule</th><th>Nom complet</th><th>Points</th></tr>` +
+      t.map((e, i) => { const v = xVal(m, p, e.id); return `<tr><td>${i + 1}</td><td>${esc(e.matricule)}</td><td>${esc(nom(e))}</td><td>${v === undefined ? '—' : xNum(v) + ' / ' + m.max}</td></tr>`; }).join('') + '</table>';
+  } else {
+    const cls = xClassement();
+    box.innerHTML = `<div>${ent} — ${X.mat.length} matière(s), ${xPerAvecNotes().length} période(s) avec notes<br><small>Aperçu : classement annuel. Le PDF contient une page par période.</small></div>
+      <table><tr><th>N°</th><th>Nom complet</th><th>Moy. annuelle /20</th><th>Rang</th></tr>` +
+      cls.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(nom(x.e))}</td><td>${x.m === null ? '—' : xDec(x.m)}</td><td>${x.m === null ? '—' : x.rang}</td></tr>`).join('') + '</table>';
+  }
+}
+
+/* En-tête et pied de page des relevés PDF */
+function xEntete(d, titre, sous) {
+  const W = d.internal.pageSize.getWidth(), e = ETAB_ROW || {};
+  d.setFont(undefined, 'bold'); d.setFontSize(17);
+  d.text(String(e.nom || '').toUpperCase(), W / 2, 16, { align: 'center' });
+  d.setFont(undefined, 'normal'); d.setFontSize(10);
+  d.text(String(e.adresse || '') + (e.telephone ? ' · Tél : ' + e.telephone : ''), W / 2, 22, { align: 'center' });
+  d.setLineWidth(0.6); d.line(14, 26, W - 14, 26);
+  d.setFont(undefined, 'bold'); d.setFontSize(13);
+  d.text(String(titre).toUpperCase(), W / 2, 34, { align: 'center' });
+  d.setFont(undefined, 'normal'); d.setFontSize(10);
+  if (sous) d.text(String(sous), W / 2, 40, { align: 'center' });
+  return sous ? 46 : 42;
+}
+function xPied(d) {
+  const W = d.internal.pageSize.getWidth(), H = d.internal.pageSize.getHeight();
+  d.setFontSize(8); d.setFont(undefined, 'normal');
+  d.text('Établi le ' + new Date().toLocaleDateString('fr-FR') + ' par ' + (C.nom_complet || ''), 14, H - 8);
+  d.text('Page ' + d.internal.getNumberOfPages(), W - 14, H - 8, { align: 'right' });
+}
+
+async function xPdf() {
+  if (!X || !X.ins.length || !X.mat.length) return alert('Rien à exporter : classe sans élève ou sans matière.');
+  const etat = $('xEtat'), btn = $('xpdf'), mode = $('xm').value, t = xTri(), an = xAn().lib || '';
+  btn.disabled = true; etat.className = ''; etat.textContent = '⏳ Chargement du module PDF…';
+  try {
+    if (!await libsTable()) { etat.textContent = '❌ PDF indisponible : connexion Internet requise pour charger le générateur PDF.'; etat.className = 'bas'; return; }
+    const { jsPDF } = window.jspdf;
+    let fichier;
+    if (mode === '1') {
+      const m = X.mat.find(x => x.id === $('xmat').value), p = $('xp').value;
+      if (!m) return alert('Choisissez une matière.');
+      const vals = t.map(e => xVal(m, p, e.id)).filter(v => v !== undefined);
+      if (!vals.length) { etat.textContent = ''; return alert('Aucune note enregistrée pour cette matière et cette période.'); }
+      const moyc = vals.reduce((s, v) => s + v, 0) / vals.length;
+      const d = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const y0 = xEntete(d, 'Points obtenus — ' + m.nom, xPerLib(p) + ' · Classe ' + xTitreClasse(X.c) + ' · Année scolaire ' + an);
+      d.autoTable({
+        head: [['N°', 'Matricule', 'Nom complet', 'Points', 'Sur', '%']],
+        body: t.map((e, i) => { const v = xVal(m, p, e.id); return [i + 1, e.matricule, nom(e), v === undefined ? '—' : xNum(v), m.max, v === undefined ? '—' : Math.round(v / m.max * 100) + ' %']; }),
+        foot: [['', '', 'Moyenne de la classe (' + vals.length + ' notes)', xNum(moyc), m.max, Math.round(moyc / m.max * 100) + ' %']],
+        startY: y0, styles: { fontSize: 9 }, headStyles: { fillColor: [37, 99, 235] }, footStyles: { fillColor: [100, 100, 100] },
+        columnStyles: { 0: { cellWidth: 12, halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
+        didDrawPage: () => xPied(d)
+      });
+      fichier = xFichier('Points de ' + m.nom + ' - ' + xPerLib(p) + ' - ' + xNomClasse(X.c) + ' ' + an);
+      d.save(fichier + '.pdf');
+    } else {
+      const pers = xPerAvecNotes();
+      if (!pers.length) { etat.textContent = ''; return alert('Aucune note enregistrée pour cette classe et cette année.'); }
+      const d = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      pers.forEach(([k, l], i) => {
+        if (i > 0) d.addPage();
+        const y0 = xEntete(d, 'Points obtenus — classe ' + xTitreClasse(X.c), l + ' · Année scolaire ' + an);
+        d.autoTable({
+          head: [['N°', 'Matricule', 'Nom complet', ...X.mat.map(m => m.nom + '\n/' + m.max + ' · coef ' + m.coef), 'Moy. /20']],
+          body: t.map((e, j) => { const mm = xMoyP(e.id, k);
+            return [j + 1, e.matricule, nom(e), ...X.mat.map(m => { const v = xVal(m, k, e.id); return v === undefined ? '—' : xNum(v); }), mm === null ? '—' : xDec(mm)]; }),
+          startY: y0, styles: { fontSize: 8, cellPadding: 1.5 }, headStyles: { fillColor: [37, 99, 235], fontSize: 7, halign: 'center' },
+          columnStyles: { 0: { cellWidth: 9, halign: 'right' } }, didDrawPage: () => xPied(d)
+        });
+      });
+      // Récapitulatif annuel
+      d.addPage();
+      const y1 = xEntete(d, 'Récapitulatif annuel — classe ' + xTitreClasse(X.c), 'Moyennes sur 20 · Année scolaire ' + an);
+      const cls = xClassement();
+      d.autoTable({
+        head: [['N°', 'Matricule', 'Nom complet', ...pers.map(p => p[1]), 'Moy. annuelle', 'Rang']],
+        body: cls.map((x, i) => [i + 1, x.e.matricule, nom(x.e), ...pers.map(([k]) => { const mm = xMoyP(x.e.id, k); return mm === null ? '—' : xDec(mm); }),
+          x.m === null ? '—' : xDec(x.m), x.m === null ? '—' : x.rang]),
+        startY: y1, styles: { fontSize: 8, cellPadding: 1.5 }, headStyles: { fillColor: [37, 99, 235], fontSize: 7, halign: 'center' },
+        columnStyles: { 0: { cellWidth: 9, halign: 'right' } }, didDrawPage: () => xPied(d)
+      });
+      fichier = xFichier('Points de la classe ' + xNomClasse(X.c) + ' ' + an + ' - toutes périodes');
+      d.save(fichier + '.pdf');
+    }
+    auditer('points.export_pdf', fichier, { classe: X.c.id, annee: X.a, critere: mode, periode: mode === '1' ? $('xp').value : null });
+    etat.textContent = '✅ ' + fichier + '.pdf'; etat.className = 'bon';
+  } catch (err) {
+    console.error(err);
+    etat.textContent = '❌ Échec de la création du PDF : ' + (err && err.message || err); etat.className = 'bas';
+  } finally { btn.disabled = false; }
+}
+
+function xCsv() {
+  if (!X || !X.ins.length || !X.mat.length) return alert('Rien à exporter : classe sans élève ou sans matière.');
+  const mode = $('xm').value, t = xTri(), an = xAn().lib || '';
+  if (mode === '1') {
+    const m = X.mat.find(x => x.id === $('xmat').value), p = $('xp').value;
+    if (!m) return alert('Choisissez une matière.');
+    const fichier = xFichier('Points de ' + m.nom + ' - ' + xPerLib(p) + ' - ' + xNomClasse(X.c) + ' ' + an);
+    telecharger(fichier + '.csv', ['Matricule', 'Élève', 'Sexe', 'Points', 'Maximum', 'Pourcentage'],
+      t.map(e => { const v = xVal(m, p, e.id); return [e.matricule, nom(e), e.sexe, v === undefined ? '' : xNum(v), m.max, v === undefined ? '' : Math.round(v / m.max * 100) + ' %'].map(q).join(';'); }));
+    auditer('points.export_csv', fichier, { classe: X.c.id, annee: X.a, critere: 1 });
+  } else {
+    const pers = xPerAvecNotes();
+    if (!pers.length) return alert('Aucune note enregistrée pour cette classe et cette année.');
+    const fichier = xFichier('Points de la classe ' + xNomClasse(X.c) + ' ' + an + ' - toutes périodes');
+    const entetes = ['Matricule', 'Élève'];
+    pers.forEach(([k, l]) => { X.mat.forEach(m => entetes.push(m.nom + ' (/' + m.max + ') — ' + l)); entetes.push('Moyenne /20 — ' + l); });
+    entetes.push('Moyenne annuelle /20', 'Rang');
+    const rang = new Map(xClassement().map(x => [x.e.id, x.m === null ? '' : x.rang]));
+    telecharger(fichier + '.csv', entetes, t.map(e => {
+      const row = [e.matricule, nom(e)];
+      pers.forEach(([k]) => { X.mat.forEach(m => { const v = xVal(m, k, e.id); row.push(v === undefined ? '' : xNum(v)); }); const mm = xMoyP(e.id, k); row.push(mm === null ? '' : xDec(mm)); });
+      const ma = xMoyA(e.id); row.push(ma === null ? '' : xDec(ma), rang.get(e.id));
+      return row.map(q).join(';');
+    }));
+    auditer('points.export_csv', fichier, { classe: X.c.id, annee: X.a, critere: 2 });
+  }
+}
+
 /* Fonctions appelées par les attributs onclick / onchange du HTML */
 Object.assign(window, { tab, okMat, resetMat, editMat, delMat, rSaisie, filtrSaisie, setNote, togglePer,
-  rBull, filtrBull, ouvrirTrouve, pdfBulletins, exportCl, bulletin, fermerGroupe });
-
+  rBull, filtrBull, ouvrirTrouve, pdfBulletins, exportCl, bulletin, fermerGroupe,
+  xMajClasses, xChargerClasse, xMode, xRefresh, xPdf, xCsv });
 $('classe').addEventListener('change', async () => { await chargerNotes(); rendu(); });
 await init();
 </script>
