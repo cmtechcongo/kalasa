@@ -9,7 +9,7 @@
    pour toute classe de niveau Université.
    Règles de calcul (à régler dans REGLES) :
      crédits = coefficient de la matière · VH = crédits × 25
-     note /20 = moyenne des sections saisies (S1, S2), ramenée sur 20
+     note /20 = moyenne des sessions saisies (S1, S2), ramenée sur 20
      pondérée = note × crédits · validé si note ≥ 10
      moyenne annuelle = total pondérées ÷ total crédits
    ============================================================ */
@@ -19,7 +19,7 @@
   const REGLES = {
     heuresParCredit: 25,          // VH = crédits × 25
     seuilValidation: 10,          // note /20 minimale pour valider une matière
-    sections: ['S1', 'S2'],       // codes de notes KALASA (PER_UNI de note.html)
+    sections: ['S1', 'S2'],       // codes de notes KALASA (1ère et 2ème session)
     libelleSections: 'Semestre 1 & 2',
     // Mentions : 10–11,99 = « Passable (E) » (confirmé par votre relevé). Autres seuils à confirmer.
     mentions: [[16, 'Excellent (A)'], [14, 'Très bien (B)'], [12, 'Bien (C)'], [10, 'Passable (E)'], [0, 'Insuffisant (F)']],
@@ -33,24 +33,24 @@
   const CSS = `
 .bulletin.releve,.bulletin.releve *{box-sizing:border-box}
 .bulletin.releve{position:relative;width:794px;height:1123px;overflow:hidden;background:#fff;color:#1a1a1a;padding:40px 34px;font-family:"Times New Roman",Times,serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.releve .entete{display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:10px}
-.releve .logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden}.releve .logo img{max-width:100%;max-height:100%;object-fit:contain;display:block}
-.releve .titre{text-align:center;line-height:1.3}
-.releve .inst{font:900 17px Arial,sans-serif}.releve .sigle{font:bold 15px Arial,sans-serif}.releve .rdc{font:bold 14px Arial,sans-serif}
-.releve .rel{font:bold 15px Arial,sans-serif;text-decoration:underline;margin-top:4px}.releve .presc{font:bold 12px Arial,sans-serif}
-.releve .photo{width:90px;height:100px;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font:bold 13px Arial,sans-serif;justify-self:end;overflow:hidden}.releve .photo img{width:100%;height:100%;object-fit:cover}
-.releve .identite{margin:14px 0 8px;font:13px Arial,sans-serif;line-height:1.8}.releve .ligne{display:flex;flex-wrap:wrap;gap:4px 28px}
-.releve h2{text-align:center;font:15px Arial,sans-serif;margin:12px 0 6px}
-.releve table{width:100%;border-collapse:collapse;font:11.5px Arial,sans-serif;table-layout:fixed}
-.releve th,.releve td{border:1px solid #444;padding:3px 4px;text-align:center;overflow:hidden}
-.releve thead th{background:#e9e6df;font-weight:700}.releve td.mat{text-align:left;font-weight:700}
-.releve tr.total td{font-weight:700;font-size:13px;background:#e9e6df}.releve .nv{font-weight:700}
-.releve.dense table{font-size:10px}.releve.dense th,.releve.dense td{padding:1px 3px}
-.releve .bas{display:flex;justify-content:space-between;gap:20px;margin-top:14px;font:13px Arial,sans-serif}
-.releve .resume{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:3px;margin:0}.releve .resume dt{font-weight:700}.releve .resume dd{margin:0}
-.releve .signature{text-align:center;align-self:flex-end;font-size:12px;line-height:1.6;min-width:230px}.releve .signature .parafe{height:34px}
-.releve .legende{display:flex;justify-content:space-between;font:11px Arial,sans-serif;margin-top:12px}
-.releve .nb{text-align:center;font-style:italic;font-size:12px;margin-top:14px}
+.bulletin.releve .entete{display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:10px}
+.bulletin.releve .logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden}.bulletin.releve .logo img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.bulletin.releve .titre{text-align:center;line-height:1.3}
+.bulletin.releve .inst{font:900 17px Arial,sans-serif}.bulletin.releve .sigle{font:bold 15px Arial,sans-serif}.bulletin.releve .rdc{font:bold 14px Arial,sans-serif}
+.bulletin.releve .rel{font:bold 15px Arial,sans-serif;text-decoration:underline;margin-top:4px}.bulletin.releve .presc{font:bold 12px Arial,sans-serif}
+.bulletin.releve .photo{width:90px;height:100px;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font:bold 13px Arial,sans-serif;justify-self:end;overflow:hidden}.bulletin.releve .photo img{width:100%;height:100%;object-fit:cover}
+.bulletin.releve .identite{margin:14px 0 8px;font:13px Arial,sans-serif;line-height:1.8}.bulletin.releve .ligne{display:flex;flex-wrap:wrap;gap:4px 28px}
+.bulletin.releve h2{text-align:center;font:15px Arial,sans-serif;margin:12px 0 6px}
+.bulletin.releve table{width:100%;border-collapse:collapse;font:11.5px Arial,sans-serif;table-layout:fixed}
+.bulletin.releve th,.bulletin.releve td{border:1px solid #444;padding:3px 4px;text-align:center;overflow:hidden}
+.bulletin.releve thead th{background:#e9e6df;font-weight:700}.bulletin.releve td.mat{text-align:left;font-weight:700}
+.bulletin.releve tr.total td{font-weight:700;font-size:13px;background:#e9e6df}.bulletin.releve .nv{font-weight:700}
+.bulletin.releve.dense table{font-size:10px}.bulletin.releve.dense th,.bulletin.releve.dense td{padding:1px 3px}
+.bulletin.releve .bas{display:flex;justify-content:space-between;gap:20px;margin-top:14px;font:13px Arial,sans-serif}
+.bulletin.releve .resume{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:3px;margin:0}.bulletin.releve .resume dt{font-weight:700}.bulletin.releve .resume dd{margin:0}
+.bulletin.releve .signature{text-align:center;align-self:flex-end;font-size:12px;line-height:1.6;min-width:230px}.bulletin.releve .signature .parafe{height:34px}
+.bulletin.releve .legende{display:flex;justify-content:space-between;font:11px Arial,sans-serif;margin-top:12px}
+.bulletin.releve .nb{text-align:center;font-style:italic;font-size:12px;margin-top:14px}
 .bulletin-overlay{position:fixed;inset:0;background:#e5e5e5;z-index:9999;display:none;overflow:auto;padding:12px}
 .bulletin-overlay.show{display:block}
 .bulletin-overlay .bo-bar{position:sticky;top:0;background:#fff;padding:8px;display:flex;gap:8px;border-radius:8px;margin-bottom:10px;box-shadow:0 2px 6px #0003;z-index:10}
@@ -62,7 +62,7 @@
 
   const MODELES = { 'REL-UNIV': { type: 'universite', label: 'Relevé de notes · Université (LMD)', ref: 'RELEVE' } };
 
-  /* Calcule le relevé d'un étudiant à partir des données de note.html. */
+  /* Calcule le relevé d'un étudiant à partir des données de note.html / espace-eleve.html. */
   function calculer(data) {
     const { eleve = {}, notes = {}, matieres = [] } = data;
     const lignes = matieres.map(m => {
@@ -83,7 +83,10 @@
   function renderReleve(data) {
     const { eleve = {}, classe = {}, etab = {}, annee = '' } = data;
     const R = calculer(data);
-    const photo = eleve.photo ? `<img src="${esc(eleve.photo)}" alt="">` : 'PHOTO';
+    const fd = d => d ? String(d).split('-').reverse().join('/') : '';
+    const naiss = eleve.naiss || fd(eleve.date_naissance), lieu = eleve.lieuNaiss || eleve.lieu_naissance || '';
+    const pho = eleve.photo || eleve.photo_url || '';
+    const photo = pho ? `<img src="${esc(pho)}" alt="">` : 'PHOTO';
     const lignes = R.lignes.map((l, i) => `<tr><td>${i + 1}</td><td></td><td class="mat">${esc(String(l.nom).toUpperCase())}</td><td>${fr(l.vh)}</td><td>${fr(l.cr)}</td><td>${fr(l.note, 2)}</td><td>${fr(l.pond, 1)}</td><td${l.valide === 'NV' ? ' class="nv"' : ''}>${l.valide}</td><td>${fr(l.crValides)}</td></tr>`).join('');
     const decision = REGLES.decision ? REGLES.decision(R) : (data.decision || '');
     const filiere = classe.option || classe.option_faculte || classe.faculte || '';
@@ -95,7 +98,7 @@
 <div class="photo">${photo}</div></header>
 <section class="identite"><div class="ligne"><span><b>Année universitaire :</b> ${esc(annee)}</span></div>
 <div class="ligne"><span><b>Nom :</b> ${esc([eleve.nom, eleve.postnom, eleve.prenom].filter(Boolean).join(' '))}</span></div>
-<div class="ligne"><span><b>Matricule :</b> ${esc(eleve.matricule || '')}</span><span><b>Né(e) à :</b> ${esc(eleve.lieuNaiss || '')}, le ${esc(eleve.naiss || '')}</span><span><b>Sexe :</b> ${esc(eleve.sexe || '')}</span></div>
+<div class="ligne"><span><b>Matricule :</b> ${esc(eleve.matricule || '')}</span><span><b>Né(e) à :</b> ${esc(lieu)}, le ${esc(naiss)}</span><span><b>Sexe :</b> ${esc(eleve.sexe || '')}</span></div>
 <div class="ligne"><span><b>Domaine :</b> ${esc(classe.domaine || '')}</span><span><b>Filière :</b> ${esc(filiere)}</span></div></section>
 <h2>Unités d'enseignement (UE) et Eléments constitutifs de l'UE (ECUE)</h2>
 <table><colgroup><col style="width:5%"><col style="width:13%"><col style="width:30%"><col style="width:8%"><col style="width:8%"><col style="width:9%"><col style="width:10%"><col style="width:8%"><col style="width:9%"></colgroup>
@@ -107,7 +110,7 @@
 <dt>Total volume Horaire Annuel :</dt><dd>${fr(R.vh)}</dd><dt>Nombre total de Crédit Annuel :</dt><dd>${fr(R.crTot)}</dd>
 <dt>Crédits Validés :</dt><dd>${fr(R.crVal)}</dd><dt>Moyenne annuelle :</dt><dd>${fr(R.moyenne, 2)}</dd>
 <dt>Mention Obtenue :</dt><dd>${esc(R.mention)}</dd><dt>Décision de Jury :</dt><dd>${esc(decision)}</dd></dl>
-<div class="signature">Le Chef de Section P.O<br><div class="parafe"></div>${esc(etab.signataire || '')}</div></section>
+<div class="signature">Le Chef de Section P.O<br><div class="parafe"></div>${esc(etab.signataire || etab.chef_section || '')}</div></section>
 <div class="legende"><span>NV: Crédit Non Validé</span><span>V: crédit Validé</span><span>VH: volume horaire</span><span>Vc : crédit Validé par Compensation</span></div>
 <p class="nb">N.B. : Ce relevé est délivré sans rature ni surcharge et certifié exact d'après les grilles du Premier &amp; Deuxième Semestre</p></div>`;
   }
@@ -115,7 +118,8 @@
   /* ---------- Branchement sur BULLETIN ---------- */
   const B = global.BULLETIN = global.BULLETIN || {};
   const vieux = { dispo: B.estDisponible, render: B.render, ouvrir: B.ouvrir };
-  const estUniv = c => !!c && (c.modeleBulletin === 'REL-UNIV' || (!c.modeleBulletin && /univers/.test(norm(c.type || c.niveau))));
+  const choix = c => c && (c.modeleBulletin || c.modele_bulletin);   // note.html (modele_bulletin) ou espace-eleve (modeleBulletin)
+  const estUniv = c => !!c && (choix(c) === 'REL-UNIV' || (!choix(c) && /univers/.test(norm(c.type || c.niveau))));
 
   function injecterCss() {
     if (document.getElementById('bulletin-univ-css')) return;
