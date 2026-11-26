@@ -1102,7 +1102,7 @@
     wrap.style.height = (H * k) + 'px';
   }
 
-  function ouvrir(data) {
+function ouvrir(data) {
     // Garde-fou : refuse si la classe n'a pas de modèle de bulletin
     if (!estDisponible(data && data.classe)) { alert(MOTIF_INDISPO); return false; }
     injectCSS();
@@ -1114,22 +1114,22 @@
       document.body.appendChild(ov);
     }
     ov.innerHTML = `
-  <div class="bo-bar">
-    <button onclick="window.print()">🖨 Imprimer / PDF</button>
-    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
-  </div>
-  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
+      <div class="bo-bar">
+        <button onclick="window.print()">🖨 Imprimer / PDF</button>
+        <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
+      </div>
+      <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
     ov.classList.add('show');
     fitOverlay();
     window.scrollTo(0, 0);
     return true;
   }
 
-  /* ╔══════════════════════════════════════════════════════════╗
-     ║  ⚠️ COLLE ICI LA FIN DE TON FICHIER ACTUEL                ║
-     ║  Dans ton bulletin-modele.js sur GitHub, copie les       ║
-     ║  dernières lignes qui viennent APRÈS la fonction ouvrir  ║
-     ║  (de « window.addEventListener… » ou « global.BULLETIN = │
-     ║  … » jusqu'à « })(window); ») et colle-les à la place    ║
-     ║  de ce cadre. Ne rien changer d'autre.                   ║
-     ╚══════════════════════════════════════════════════════════╝ */
+  window.addEventListener('resize', fitOverlay);
+
+  /* Exposé aux pages (classe.html lit MODELES ; note.html et espace-eleve.html lisent MOTIF) */
+  global.BULLETIN = {
+    estDisponible, ouvrir, render, mapMatiere,
+    MODELES, MODELE_DEFAUT, MOTIF: MOTIF_INDISPO
+  };
+})(window);
