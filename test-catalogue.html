@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Test catalogue</title></head>
+<body style="font-family:sans-serif;padding:12px">
+<h3>Test bulletin-catalogue.js</h3>
+<pre id="sortie" style="white-space:pre-wrap">Chargement…</pre>
+<script type="module">
+const sortie = document.getElementById('sortie');
+try {
+  const C = await import('./bulletin-catalogue.js');
+  const out = ['Options : ' + C.optionsHumanites().join(', ')];
+  for (const m of C.BULLETIN_CATALOGUE) {
+    const { lignes, general } = C.maximaModele(m);
+    out.push(`${m.cle} | ${m.code} | ${lignes.length} branches | max ${general}`);
+  }
+  const m3 = C.trouverModele(3, 'Pédagogie générale');
+  const r = C.calculerBulletin(m3, {
+    'Religion': { s1: { p1: 8, p2: 7, ex: 15 }, s2: { p3: 9, p4: 8, ex: 9 } }
+  });
+  out.push(`Test 3e : Religion = ${r.rows[0].total}/${r.rows[0].general} ; global ${r.obtenu}/${r.general} (${r.pourcentage} %)`);
+  sortie.textContent = out.join('\n');
+} catch (e) {
+  sortie.textContent = 'ERREUR : ' + e.message;
+}
+</script></body></html>
