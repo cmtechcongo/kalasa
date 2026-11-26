@@ -3,25 +3,26 @@
    Bulletins officiels RDC
    Modèles : IGE-004 (Élémentaire 1ère/2e année) · IGE-010 (1ère HP) · IGE-011 (2ème HP)
              IGE-012 (3ème HP) · IGE-013 (4ème HP)
-             IGE-050 (1ère/2ème Mécanique machines-outils) · IGE-051 (3ème) · IGE-052 (4ème)
-   Le modèle utilisé dépend du champ "modeleBulletin" (ou "modele_bulletin") de la classe
+             IGE-042 à IGE-045 (Commerciale & Gestion 1ère → 4ème)
+   Le modèle utilisé dépend du champ "modeleBulletin" de la classe
    (choisi dans classe.html : la liste se remplit toute seule).
    Toutes les classes d'un même niveau (1ère A, 1ère B, 1ère C…) choisissent
    le même modèle : le bulletin se remplit avec les notes de chaque élève.
+
    Dépendances : aucune (autonome)
    Usage :
-     BULLETIN.estDisponible(classe) -> true/false
+     BULLETIN.estDisponible(classe)  -> true/false
      BULLETIN.ouvrir({ eleve, classe, etab, annee, notes, matieres, rang, nEleves })
-     BULLETIN.render(data)  -> HTML string
+     BULLETIN.render(data)           -> HTML string
 
    ┌──────────────────────────────────────────────────────────┐
-   │ ➕ POUR AJOUTER UN NOUVEAU BULLETIN, 2 ÉTAPES :            │
-   │   ÉTAPE 1 : créer ses groupes de maxima (GROUPES_xxx)     │
-   │             → repère « ÉTAPE 1 » plus bas                 │
-   │   ÉTAPE 2 : l'inscrire dans le registre MODELES           │
-   │             → repère « ÉTAPE 2 » plus bas                 │
-   │ Rien d'autre à modifier (classe.html, note.html et        │
-   │ espace-eleve.html se mettent à jour tout seuls).          │
+   │ ➕ POUR AJOUTER UN NOUVEAU BULLETIN, 2 ÉTAPES :           │
+   │   ÉTAPE 1 : créer ses groupes de maxima (GROUPES_xxx)    │
+   │             → repère « ÉTAPE 1 » plus bas                │
+   │   ÉTAPE 2 : l'inscrire dans le registre MODELES          │
+   │             → repère « ÉTAPE 2 » plus bas                │
+   │   Rien d'autre à modifier (classe.html, note.html et     │
+   │   espace-eleve.html se mettent à jour tout seuls).       │
    └──────────────────────────────────────────────────────────┘
    ============================================================ */
 (function (global) {
@@ -34,8 +35,8 @@
        matieres: lignes du papier, dans l'ordre
          nom : texte imprimé sur le bulletin
          re  : mot-clé pour reconnaître la matière saisie dans KALASA
-         sup : true  → affiche « (1) » après le nom (optionnel)
-       noEx: true → colonne examen hachurée, sans examen (optionnel)
+         sup : true → affiche « (1) » après le nom (optionnel)
+         noEx: true → colonne examen hachurée, sans examen (optionnel)
      ============================================================ */
 
   /* ---------- Modèle IGE-010 (1ère année) ---------- */
@@ -178,7 +179,7 @@
     },
     {
       max: { p: 100, ex: 0 },
-      noEx: true,                         // colonne examen hachurée
+      noEx: true, // colonne examen hachurée
       matieres: [
         { nom: 'Pratique d’Enseignement', re: /pratique/i }
       ]
@@ -231,179 +232,105 @@
     },
     {
       max: { p: 100, ex: 0 },
-      noEx: true,                         // colonne examen hachurée
+      noEx: true, // colonne examen hachurée
       matieres: [
         { nom: 'Pratique d’Enseignement', re: /pratique/i }
       ]
     }
   ];
 
-  /* ---------- Mécanique / Machines-outils : 1ère et 2ème année (IGE/PS./050) ---------- */
-  const GROUPES_050 = [
-    {
-      max: { p: 10, ex: 20 },
-      matieres: [
-        { nom: 'Education à la vie', re: /\bvie\b/i },
-        { nom: 'Ed. civ. & morale', re: /civ|morale/i },
-        { nom: 'Religion', re: /relig/i, sup: true }
-      ]
-    },
-    {
-      max: { p: 20, ex: 40 },
-      matieres: [
-        { nom: 'Actualités / Géographie', re: /actualit|g[ée]ograph/i },
-        { nom: 'Anglais', re: /anglais/i },
-        { nom: 'Chimie', re: /chimie/i },
-        { nom: 'Elect. Electro. Automob. (E.E.A)', re: /\be\.?\s?e\.?\s?a\b|[ée]lectro.*auto/i },
-        { nom: 'Electricité', re: /[ée]lectricit/i },
-        { nom: 'Histoire', re: /histoir/i },
-        { nom: 'Informatique', re: /informati/i },
-        { nom: 'Métallurgie', re: /m[ée]tallurg/i },
-        { nom: 'Physique', re: /^(?!.*(sport|[ée]duc|ed\.)).*physique/i },
-        { nom: 'Technologie auto.', re: /techno.*auto/i },
-        { nom: 'Technologie des moteurs', re: /moteur/i },
-        { nom: 'Technologie de soudure', re: /soud/i }
-      ]
-    },
-    {
-      max: { p: 40, ex: 80 },
-      matieres: [
-        { nom: 'Dessin industriel', re: /dessin/i },
-        { nom: 'Mécanique générale', re: /^(?!.*(techno|appliq)).*m[ée]canique/i },
-        { nom: 'Résistance des matériaux', re: /r[ée]sist/i },
-        { nom: 'Techno. mécanique', re: /techno.*m[ée]can/i }
-      ]
-    },
-    {
-      max: { p: 50, ex: 100 },
-      matieres: [
-        { nom: 'Français', re: /fran[çc]ais/i },
-        { nom: 'Mathématiques', re: /math/i }
-      ]
-    },
-    {
-      max: { p: 100, ex: 0 },
-      noEx: true,
-      matieres: [
-        { nom: 'Pratique professionnelle', re: /pratique|atelier/i }
-      ]
-    }
+  /* ---------- Commerciale & Gestion : matières communes (IGE-042 à 045) ----------
+     Les « re » sont volontairement précis : dans ce moteur, une matière
+     KALASA peut correspondre à plusieurs lignes, donc on évite les
+     chevauchements (Anglais ≠ Correspondance anglaise, etc.). */
+  const CG = {
+    religion: { nom: 'Religion', re: /relig/i, sup: true },
+    droit:    { nom: 'Droit', re: /\bdroit\b/i },
+    vie:      { nom: 'Education à la Vie', re: /\bvie\b/i },
+    civ:      { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    sport:    { nom: 'Education phys. & sportive', re: /phys|sport/i },
+    geo:      { nom: 'Géographie économique', re: /g[ée]ograph/i },
+    corAng:   { nom: 'Correspondance com. anglaise', re: /corresp.*angl/i },
+    corFr:    { nom: 'Correspondance com. française', re: /corresp.*fran[çc]/i },
+    fisc:     { nom: 'Fiscalité', re: /fiscal/i },
+    mathFin:  { nom: 'Mathématiques financières', re: /math.*financ/i },
+    mathGen:  { nom: 'Mathématiques générales', re: /math(?!.*financ)/i },
+    banques:  { nom: 'Op. des banques et des crédits', re: /banque|cr[ée]dit/i },
+    eco:      { nom: 'Economie politique', re: /[ée]conom.*polit/i },
+    ecoDev:   { nom: 'Economie de développement', re: /[ée]conom.*d[ée]velop/i },
+    entrep:   { nom: 'Entrepreneuriat', re: /entrepr/i },
+    deonto:   { nom: 'Déontologie professionnelle', re: /d[ée]ontolog/i },
+    finPub:   { nom: 'Finances publiques', re: /financ.*publi/i },
+    organ:    { nom: 'Organisation des entreprises', re: /organis/i },
+    visites:  { nom: 'Activités compl. (visites guidées)', re: /activit|visite/i },
+    anglais:  { nom: 'Anglais', re: /^(?!.*corresp).*anglais/i },
+    docu:     { nom: 'Documentation commerciale', re: /document/i },
+    francais: { nom: 'Français', re: /^(?!.*corresp).*fran[çc]ais/i },
+    info:     { nom: 'Informatique', re: /informati/i },
+    comptaA:  { nom: 'Comptabilité analytique', re: /comptab.*analyt/i },
+    comptaG:  { nom: 'Comptabilité générale', re: /comptab(?!.*analyt)/i },
+    pratique: { nom: 'Pratique professionnelle', re: /pratique|stage/i }
+  };
+
+  /* ---------- Modèle IGE-042 (1ère Commerciale & Gestion) ---------- */
+  const GROUPES_042 = [
+    { max: { p: 10, ex: 20 },  matieres: [CG.religion, CG.droit, CG.vie, CG.civ, CG.sport, CG.geo] },
+    { max: { p: 20, ex: 40 },  matieres: [CG.corAng, CG.corFr, CG.fisc, CG.mathFin, CG.mathGen] },
+    { max: { p: 20, ex: 0 },   noEx: true, matieres: [CG.visites] },
+    { max: { p: 30, ex: 60 },  matieres: [CG.anglais, CG.docu] },
+    { max: { p: 40, ex: 80 },  matieres: [CG.francais, CG.info] },
+    { max: { p: 60, ex: 120 }, matieres: [CG.comptaG] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CG.pratique] }
   ];
 
-  /* ---------- Mécanique / Machines-outils : 3ème année (IGE/PS./051) ---------- */
-  const GROUPES_051 = [
-    {
-      max: { p: 10, ex: 20 },
-      matieres: [
-        { nom: 'Education à la vie', re: /\bvie\b/i },
-        { nom: 'Ed. civ. & morale', re: /civ|morale/i },
-        { nom: 'Religion', re: /relig/i, sup: true }
-      ]
-    },
-    {
-      max: { p: 20, ex: 40 },
-      matieres: [
-        { nom: 'Actualités', re: /actualit/i },
-        { nom: 'Anglais', re: /anglais/i },
-        { nom: 'Autom. program. Indust. (A.P.I.)', re: /autom.*program|\ba\.?p\.?i\b/i, sup: true },
-        { nom: 'Electricité', re: /[ée]lectricit/i },
-        { nom: 'Eléments de machine', re: /[ée]l[ée]ments?.*machine/i },
-        { nom: 'Maintenance informatique', re: /maintenance/i },
-        { nom: 'Métallurgie', re: /m[ée]tallurg/i }
-      ]
-    },
-    {
-      max: { p: 40, ex: 80 },
-      matieres: [
-        { nom: 'Dessin industriel', re: /dessin/i },
-        { nom: 'Mécanique appliquée', re: /m[ée]can.*appliq/i },
-        { nom: 'Résistance des matériaux', re: /r[ée]sist/i },
-        { nom: 'Techno. mécanique', re: /techno.*m[ée]can/i }
-      ]
-    },
-    {
-      max: { p: 50, ex: 100 },
-      matieres: [
-        { nom: 'Français', re: /fran[çc]ais/i },
-        { nom: 'Mathématiques', re: /math/i }
-      ]
-    },
-    {
-      max: { p: 50, ex: 0 },
-      noEx: true,
-      matieres: [
-        { nom: 'Stage', re: /stage/i }
-      ]
-    },
-    {
-      max: { p: 100, ex: 0 },
-      noEx: true,
-      matieres: [
-        { nom: 'Pratique professionnelle', re: /pratique|atelier/i }
-      ]
-    }
+  /* ---------- Modèle IGE-043 (2ème Commerciale & Gestion) ----------
+     Même structure que la 1ère (ordre Math. générales / financières inversé sur le papier). */
+  const GROUPES_043 = [
+    { max: { p: 10, ex: 20 },  matieres: [CG.religion, CG.droit, CG.vie, CG.civ, CG.sport, CG.geo] },
+    { max: { p: 20, ex: 40 },  matieres: [CG.corAng, CG.corFr, CG.fisc, CG.mathGen, CG.mathFin] },
+    { max: { p: 20, ex: 0 },   noEx: true, matieres: [CG.visites] },
+    { max: { p: 30, ex: 60 },  matieres: [CG.anglais, CG.docu] },
+    { max: { p: 40, ex: 80 },  matieres: [CG.francais, CG.info] },
+    { max: { p: 60, ex: 120 }, matieres: [CG.comptaG] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CG.pratique] }
   ];
 
-  /* ---------- Mécanique / Machines-outils : 4ème année · Examen d'Etat (IGE/PS./052) ---------- */
-  const GROUPES_052 = [
-    {
-      max: { p: 10, ex: 20 },
-      matieres: [
-        { nom: 'Education à la vie', re: /\bvie\b/i },
-        { nom: 'Ed. civ. & morale', re: /civ|morale/i },
-        { nom: 'Religion', re: /relig/i, sup: true }
-      ]
-    },
-    {
-      max: { p: 20, ex: 40 },
-      matieres: [
-        { nom: 'Actualités', re: /actualit/i },
-        { nom: 'Anglais', re: /anglais/i },
-        { nom: 'Construction', re: /construction/i },
-        { nom: 'Informatique', re: /informati/i },
-        { nom: 'Organisation des entreprises', re: /organisation/i },
-        { nom: 'Techno. mécanique', re: /techno.*m[ée]can/i },
-        { nom: 'Trans. Hydro. Pneumat. (T.H.P)', re: /hydro|pneumat|\bt\.?h\.?p\b/i }
-      ]
-    },
-    {
-      max: { p: 40, ex: 80 },
-      matieres: [
-        { nom: 'Dessin industriel', re: /dessin/i },
-        { nom: 'Electricité', re: /[ée]lectricit/i },
-        { nom: 'Mécanique', re: /^(?!.*(techno|appliq)).*m[ée]canique/i },
-        { nom: 'Résis. + éléments mach.', re: /r[ée]sist|[ée]l[ée]ments?.*mach/i }
-      ]
-    },
-    {
-      max: { p: 50, ex: 100 },
-      matieres: [
-        { nom: 'Français', re: /fran[çc]ais/i },
-        { nom: 'Mathématiques', re: /math/i }
-      ]
-    },
-    {
-      max: { p: 100, ex: 0 },
-      noEx: true,
-      matieres: [
-        { nom: 'Pratique professionnelle', re: /pratique|atelier/i }
-      ]
-    }
+  /* ---------- Modèle IGE-044 (3ème Commerciale & Gestion) ---------- */
+  const GROUPES_044 = [
+    { max: { p: 10, ex: 20 },  matieres: [CG.religion, CG.vie, CG.civ, CG.sport, CG.geo, CG.fisc, CG.mathFin, CG.banques] },
+    { max: { p: 10, ex: 0 },   noEx: true, matieres: [CG.visites] },
+    { max: { p: 20, ex: 40 },  matieres: [CG.corAng, CG.corFr, CG.droit, CG.eco, CG.entrep, CG.mathGen] },
+    { max: { p: 30, ex: 60 },  matieres: [CG.anglais] },
+    { max: { p: 40, ex: 80 },  matieres: [CG.francais, CG.info] },
+    { max: { p: 60, ex: 120 }, matieres: [CG.comptaG] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CG.pratique] }
+  ];
+
+  /* ---------- Modèle IGE-045 (4ème Commerciale & Gestion · Examen d'Etat) ---------- */
+  const GROUPES_045 = [
+    { max: { p: 10, ex: 20 },  matieres: [CG.religion, CG.corAng, CG.corFr, CG.deonto, CG.vie, CG.civ, CG.sport, CG.finPub, CG.fisc] },
+    { max: { p: 10, ex: 0 },   noEx: true, matieres: [CG.visites] },
+    { max: { p: 20, ex: 40 },  matieres: [CG.droit, CG.ecoDev, CG.mathGen, CG.organ] },
+    { max: { p: 30, ex: 60 },  matieres: [CG.anglais] },
+    { max: { p: 40, ex: 80 },  matieres: [CG.comptaA, CG.francais, CG.info] },
+    { max: { p: 50, ex: 100 }, matieres: [CG.comptaG] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CG.pratique] }
   ];
 
   /* ---------- Modèle IGE-004 (Degré élémentaire · 1ère et 2e année) ----------
      Ce bulletin est par TRIMESTRE (3 trimestres), avec des domaines, des
      sous-groupes et des sous-totaux : il a donc une « structure » (liste de
      lignes dans l'ordre du papier) au lieu de groupes de maxima.
-       { dm: 'TITRE' }            → ligne de domaine
-       { gr: 'TITRE' }            → ligne de sous-groupe (fond gris)
-       { st: 'Sous-total' }       → somme des matières depuis le dernier dm/st
-       { nom, re, max:{p,ex} }    → une matière (p = max par période, ex = max examen)
-         sup:true → « (1) » après le nom ; tall:true → ligne haute en gras
+       { dm: 'TITRE' }        → ligne de domaine
+       { gr: 'TITRE' }        → ligne de sous-groupe (fond gris)
+       { st: 'Sous-total' }   → somme des matières depuis le dernier dm/st
+       { nom, re, max:{p,ex} } → une matière (p = max par période, ex = max examen)
+       sup:true → « (1) » après le nom ; tall:true → ligne haute en gras
      Une matière KALASA n'est utilisée qu'une seule fois (de haut en bas).
      Astuce de nommage dans KALASA pour les deux « Expression orale » :
      « Langues congolaises – Expression orale » et « Français – Expression orale ». */
   const CONGO = '(congol|nationale|lingala|swahili|kikongo|tshiluba)';
+
   const STRUCTURE_004 = [
     { dm: 'DOMAINE DES LANGUES' },
     { gr: 'LANGUES CONGOLAISES' },
@@ -450,25 +377,26 @@
   /* ============================================================
      ÉTAPE 2 — REGISTRE DES MODÈLES
      La clé (ex. 'IGE-010') est ce qui s'enregistre dans la classe.
-       label        : nom affiché dans classe.html
-       ref          : référence imprimée en bas à droite du papier
-       titre        : titre imprimé du bulletin
-       province     : libellé de la province
-       provLigne    : true → province sur sa propre ligne (modèle 3ème)
-       pLabels      : en-têtes des périodes 2, 3 et 4
-       chef         : texte de signature du chef d'établissement
-       fait         : ligne « Fait à … le … »
-       placeLabel   : libellé de la ligne « PLACE/NBRE … » (optionnel)
-       rowH         : hauteur des lignes en px (20 = normal ; 18 ou 17
-                      pour les modèles longs)
-       examenEtat   : true → variante 4ème année : colonnes « Examen
-                      d'Etat » + cadre de contrôle, sans bloc repêchage
-       blkBas       : true → dernière colonne noircie sur Application /
-                      Conduite / Signature
+       label      : nom affiché dans classe.html
+       ref        : référence imprimée en bas à droite du papier
+       titre      : titre imprimé du bulletin
+       province   : libellé de la province
+       provLigne  : true → province sur sa propre ligne (modèle 3ème)
+       pLabels    : en-têtes des périodes 2, 3 et 4
+       chef       : texte de signature du chef d'établissement
+       fait       : ligne « Fait à … le … »
+       placeLabel : libellé de la ligne « PLACE/NBRE … » (optionnel)
+       rowH       : hauteur des lignes en px (20 = normal ; 18 ou 17
+                    pour les modèles longs)
+       examenEtat : true → variante 4ème année : colonnes « Examen
+                    d'Etat » + cadre de contrôle, sans bloc repêchage
+       blkBas     : true → dernière colonne noircie sur Application /
+                    Conduite / Signature
        maxGenDetail : true → MAXIMA GENERAUX affiché dans toutes les colonnes
        maxGeneraux  : { p, ex } valeurs imprimées sur le papier, si elles
-                      diffèrent du calcul automatique (optionnel)
-       groupes      : les groupes de l'ÉTAPE 1
+                    diffèrent du calcul automatique (optionnel)
+       groupes    : les groupes de l'ÉTAPE 1
+
      Modèle par trimestres (type:'elementaire') : au lieu de groupes /
      pLabels / rowH…, il utilise :
        type      : 'elementaire'
@@ -516,7 +444,7 @@
       rowH: 18,
       blkBas: false,
       maxGenDetail: true,
-      maxGeneraux: { p: 750, ex: 1300 },   // valeurs imprimées sur le papier officiel
+      maxGeneraux: { p: 750, ex: 1300 }, // valeurs imprimées sur le papier officiel
       groupes: GROUPES_012
     },
     'IGE-013': {
@@ -535,50 +463,6 @@
       maxGenDetail: true,
       groupes: GROUPES_013
     },
-    'IGE-050': {
-      label: '1ère et 2ème · Mécanique machines-outils',
-      ref: 'IGE/PS./050',
-      titre: 'BULLETIN DE LA 1<sup>ère</sup>, 2<sup>ème</sup> ANNEE HUMANITES MECANIQUE / MACHINES – OUTILS',
-      province: 'PROVINCE EDUCATIONNELLE :',
-      provLigne: false,
-      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
-      chef: 'Chef d’Etablissement,<br>Noms et Signature',
-      fait: 'Fait à ……..…………………, le……/……/20……',
-      rowH: 18,
-      blkBas: false,
-      maxGenDetail: true,
-      groupes: GROUPES_050
-    },
-    'IGE-051': {
-      label: '3ème · Mécanique machines-outils',
-      ref: 'IGE/PS./051',
-      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES MECANIQUE / MACHINES – OUTILS',
-      province: 'PROVINCE EDUCATIONNELLE :',
-      provLigne: false,
-      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
-      chef: 'Chef d’Etablissement,<br>Noms et Signature',
-      fait: 'Fait à ……..…………………, le……/……/20……',
-      rowH: 19,
-      blkBas: false,
-      maxGenDetail: true,
-      groupes: GROUPES_051
-    },
-    'IGE-052': {
-      label: '4ème · Mécanique machines-outils (Examen d’Etat)',
-      ref: 'IGE/PS./052',
-      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES MECANIQUE / MACHINES - OUTILS',
-      province: 'PROVINCE EDUCATIONNELLE :',
-      provLigne: false,
-      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
-      chef: 'Chef d’Etablissement,<br>Noms et Signature',
-      fait: 'Fait à ……..…………………, le……/……/20……',
-      placeLabel: 'PLACE / NBRE D’ELEVES',
-      rowH: 18,
-      examenEtat: true,
-      blkBas: false,
-      maxGenDetail: true,
-      groupes: GROUPES_052
-    },
     'IGE-004': {
       type: 'elementaire',
       label: '1ère / 2e Élémentaire',
@@ -587,6 +471,64 @@
       // Codes de notes KALASA : [période 1, période 2, examen] pour chaque trimestre
       periodes: [['P1', 'P2', 'EX1'], ['P3', 'P4', 'EX2'], ['P5', 'P6', 'EX3']],
       structure: STRUCTURE_004
+    },
+    'IGE-042': {
+      label: '1ère HP · Commerciale & Gestion',
+      ref: 'IGE/P.S./042',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup> ANNEE HUMANITES / COMMERCIALE &amp; GESTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20…',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_042
+    },
+    'IGE-043': {
+      label: '2ème HP · Commerciale & Gestion',
+      ref: 'IGE/P.S./043',
+      titre: 'BULLETIN DE LA 2<sup>ème</sup> ANNEE HUMANITES / COMMERCIALE &amp; GESTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20…',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_043
+    },
+    'IGE-044': {
+      label: '3ème HP · Commerciale & Gestion',
+      ref: 'IGE/P.S./044',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES / COMMERCIALE &amp; GESTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20…',
+      rowH: 17,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_044
+    },
+    'IGE-045': {
+      label: '4ème HP · Commerciale & Gestion',
+      ref: 'IGE/P.S./045',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES / COMMERCIALE &amp; GESTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20…',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 17,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_045
     }
     /* ➕ ÉTAPE 2 (nouveau modèle) : ajoute une virgule après le bloc ci-dessus,
        puis colle et complète :
@@ -606,7 +548,8 @@
     }
     */
   };
-  const MODELE_DEFAUT = 'IGE-010';   // modèle utilisé pour les anciennes classes sans choix
+
+  const MODELE_DEFAUT = 'IGE-010'; // modèle utilisé pour les anciennes classes sans choix
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const n = v => (v === null || v === undefined || v === '' || isNaN(v)) ? '' : Number(v).toFixed(0);
@@ -627,18 +570,15 @@
 
   const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-  /* Modèle choisi pour la classe : « modeleBulletin » (espace élève) ou « modele_bulletin » (ligne de la base) */
-  const choixDe = c => (c && (c.modeleBulletin || c.modele_bulletin)) || '';
-
   function estDisponible(classe) {
     if (!classe) return false;
     // Méthode fiable : champ explicite défini dans classe.html
-    if ('modeleBulletin' in classe || 'modele_bulletin' in classe) return !!MODELES[choixDe(classe)];
+    if ('modeleBulletin' in classe) return !!MODELES[classe.modeleBulletin];
     // Anciennes classes (sans le champ) : détection par le texte (modèle IGE-010 seulement)
     const txt = norm(['nom', 'lib', 'type', 'option', 'section']
       .map(k => classe[k]).filter(Boolean).join(' | '));
     const premiere = /\b(1(ere|re|er)?|premiere)\b/.test(txt);
-    const pedaGen  = /pedagogie\s*(generale|gen\b)|peda\.?\s*gen|\bp\.?\s?g\b/.test(txt);
+    const pedaGen = /pedagogie\s*(generale|gen\b)|peda\.?\s*gen|\bp\.?\s?g\b/.test(txt);
     return premiere && pedaGen;
   }
 
@@ -700,7 +640,6 @@
 .bulletin .sg div{text-align:center}
 .bulletin .note{padding:2px 14px 6px;font-size:9.5px;display:flex;justify-content:space-between;align-items:flex-end}
 .bulletin .note i{font-weight:bold}
-
 /* ---- Variante élémentaire (IGE/P.S/004) : 3 trimestres, domaines, sous-totaux ---- */
 .bulletin.elem{line-height:1.2}
 .bulletin.elem .info>div:last-child{justify-content:space-between;gap:0}
@@ -720,7 +659,6 @@
 .bulletin.elem .ft{padding:6px 14px 2px;font-size:10.5px;display:flex;justify-content:space-between;align-items:flex-end}
 .bulletin.elem .ft .dl{display:inline-block;border-bottom:1px dotted #000;vertical-align:bottom;height:11px}
 .bulletin.elem .sg{padding:8px 30px 4px}
-
 .bulletin-overlay{position:fixed;inset:0;background:#e5e5e5;z-index:9999;display:none;overflow:auto;padding:12px}
 .bulletin-overlay.show{display:block}
 .bulletin-overlay .bo-bar{position:sticky;top:0;background:#fff;padding:8px;display:flex;gap:8px;border-radius:8px;margin-bottom:10px;box-shadow:0 2px 6px #0003;z-index:10}
@@ -762,6 +700,7 @@
       if (mk) used.add(mk.id);
       return Object.assign({}, it, { matK: mk || null });
     });
+
     // Matières non reconnues -> groupe « Autres matières »
     const autres = matieres.filter(m => !used.has(m.id));
     if (autres.length) {
@@ -800,6 +739,7 @@
       v.TG = v.T.some(x => x !== null) ? v.T.reduce((s, x) => s + (x || 0), 0) : null;
       return v;
     };
+
     const f = v => v === null ? '' : String(Math.round(v * 10) / 10);
 
     // 21 cellules à droite du libellé
@@ -817,6 +757,7 @@
     const tot = newAcc();
     const mxT = [0, 0, 0];
     let mxTG = 0;
+
     items.forEach(it => {
       if (it.dm) {
         tbody += `<tr class="dm"><td colspan="22">${esc(it.dm)}</td></tr>`;
@@ -840,6 +781,7 @@
       if (v.TG !== null) mxTG += mt * 3;
       tbody += `<tr${it.tall ? ' class="st tall"' : ''}><td class="br">${esc(it.nom)}${it.sup ? ' <sup>(1)</sup>' : ''}</td>${cells(it.max.p, it.max.ex, v)}</tr>`;
     });
+
     // Maxima généraux (papier) + points obtenus
     let sP = 0, sEx = 0;
     M.structure.forEach(it => { if (it.nom) { sP += it.max.p; sEx += it.max.ex; } });
@@ -865,6 +807,7 @@
     const permCases = Array.from({ length: 13 }, () => '<i></i>').join('');
 
     const colgroup = '<colgroup><col style="width:130px"><col style="width:30px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:24px"><col style="width:24px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:38px"><col style="width:34px"></colgroup>';
+
     const thead = `<thead>
 <tr><th class="br" rowspan="2">BRANCHES</th><th colspan="7">PREMIER TRIMESTRE</th><th colspan="6">DEUXIEME TRIMESTRE</th><th colspan="6">TROISIEME TRIMESTRE</th><th colspan="2">TOTAL</th></tr>
 <tr><th>MAX<br>per</th><th>1<sup>ère</sup>P.</th><th>2<sup>è</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>3<sup>e</sup>P.</th><th>4<sup>e</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>5<sup>e</sup>P.</th><th>6<sup>e</sup>P.</th><th>MAX<br>EX.</th><th>PTS<br>OBT.</th><th>MAX.<br>TRIM.</th><th>PTS<br>OBT.</th><th>MAX.</th><th>PTS<br>OBT.</th></tr>
@@ -917,9 +860,8 @@
     } = data;
 
     // Modèle choisi pour la classe (IGE-010 par défaut pour les anciennes classes)
-    const M = MODELES[choixDe(classe)] || MODELES[MODELE_DEFAUT];
+    const M = MODELES[classe.modeleBulletin] || MODELES[MODELE_DEFAUT];
     if (M.type === 'elementaire') return renderElementaire(data, M);
-    if (!M.groupes) return '<p>Bulletin indisponible pour cette classe.</p>';   // modèle fourni par un autre fichier (primaire, université…)
     const exEtat = !!M.examenEtat;
 
     // Construire la structure des groupes avec matières réelles
@@ -931,6 +873,7 @@
         return { modele: mm.nom, sup: !!mm.sup, matK: mk || null, groupeRef: g };
       })
     }));
+
     // Matières non reconnues -> groupe « Autres »
     const autres = matieres.filter(m => !mapMatiere(m.nom, M.groupes));
     if (autres.length) {
@@ -949,7 +892,7 @@
       const g = l.groupeRef;
       const raw = (p) => (notes[l.matK.id + '_' + p] || {})[eleve.id];
       const conv = (p, type) => {
-        if (type === 'ex' && g.noEx) return null;      // groupe sans examen (Pratique d'Enseignement)
+        if (type === 'ex' && g.noEx) return null; // groupe sans examen (Pratique d'Enseignement)
         const v = raw(p);
         if (v === undefined || v === null || v === '') return null;
         const maxK = +l.matK.max || 20;
@@ -982,6 +925,7 @@
     const idCases = Array.from({ length: 20 }, () => '<i></i>').join('');
     const codeCases = Array.from({ length: 9 }, () => '<i></i>').join('');
     const permCases = Array.from({ length: 13 }, () => '<i></i>').join('');
+
     const blkBas = M.blkBas ? '<td class="blk"></td>' : '<td></td>';
 
     /* --- Variante « Examen d'Etat » (4ème) : colonnes de droite ---
@@ -1000,7 +944,8 @@
       <div class="c">Le Chef<br>d’Etablissement</div>
       <div class="c" style="margin-top:6px">Sceau de l’Ecole</div>
     </td>`;
-    let ri = 0;   // numéro de ligne du tableau
+
+    let ri = 0; // numéro de ligne du tableau
     // Cellules situées à droite de la colonne noire (après T.G.)
     const fin = (stdTail) => {
       if (!exEtat) return stdTail;
@@ -1079,6 +1024,7 @@
     const colgroup = exEtat
       ? '<colgroup><col style="width:23%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:7%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:7%"><col style="width:7.5%"><col style="width:2.5%"><col style="width:3.5%"><col style="width:5.5%"><col style="width:4%"></colgroup>'
       : '<colgroup><col style="width:23%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:7%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%"><col style="width:7%"><col style="width:7.5%"><col style="width:2.5%"><col style="width:5%"><col style="width:8%"></colgroup>';
+
     const thead = exEtat
       ? `<thead>
 <tr><th class="br" rowspan="3">BRANCHES</th><th colspan="4">PREMIER SEMESTRE</th><th colspan="4">SECOND SEMESTRE</th><th rowspan="3">T.G.</th><th class="blk" rowspan="3"></th><th colspan="3">EXAMEN D’ETAT</th></tr>
@@ -1168,22 +1114,22 @@
       document.body.appendChild(ov);
     }
     ov.innerHTML = `
-      <div class="bo-bar">
-        <button onclick="window.print()">🖨 Imprimer / PDF</button>
-        <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
-      </div>
-      <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
+  <div class="bo-bar">
+    <button onclick="window.print()">🖨 Imprimer / PDF</button>
+    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
+  </div>
+  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
     ov.classList.add('show');
     fitOverlay();
     window.scrollTo(0, 0);
     return true;
   }
 
-  window.addEventListener('resize', fitOverlay);
-
-  /* Exposé aux pages (classe.html lit MODELES ; note.html et espace-eleve.html lisent MOTIF) */
-  global.BULLETIN = {
-    estDisponible, ouvrir, render, mapMatiere,
-    MODELES, MODELE_DEFAUT, MOTIF: MOTIF_INDISPO
-  };
-})(window);
+  /* ╔══════════════════════════════════════════════════════════╗
+     ║  ⚠️ COLLE ICI LA FIN DE TON FICHIER ACTUEL                ║
+     ║  Dans ton bulletin-modele.js sur GitHub, copie les       ║
+     ║  dernières lignes qui viennent APRÈS la fonction ouvrir  ║
+     ║  (de « window.addEventListener… » ou « global.BULLETIN = │
+     ║  … » jusqu'à « })(window); ») et colle-les à la place    ║
+     ║  de ce cadre. Ne rien changer d'autre.                   ║
+     ╚══════════════════════════════════════════════════════════╝ */
