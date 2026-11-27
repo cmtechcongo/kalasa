@@ -5,6 +5,7 @@
              IGE-012 (3ème HP) · IGE-013 (4ème HP)
              IGE-042 à IGE-045 (Commerciale & Gestion 1ère → 4ème)
              IGE-113 à IGE-116 (Electricité générale 1ère → 4ème)
+             IEP-CC-12 · IEP-CC-3 · IEP-CC-4 (Coupe et Couture : 1ère/2ème, 3ème, 4ème)
    Le modèle utilisé dépend du champ "modeleBulletin" de la classe
    (choisi dans classe.html : la liste se remplit toute seule).
    Toutes les classes d'un même niveau (1ère A, 1ère B, 1ère C…) choisissent
@@ -400,6 +401,64 @@
     { max: { p: 100, ex: 0 },  noEx: true, matieres: [EG.atelierE, EG.laboE] }
   ];
 
+  /* ---------- Coupe et Couture (IEP) : matières communes ---------- */
+  const CC = {
+    religion:  { nom: 'Religion', re: /relig/i, sup: true },
+    vie:       { nom: 'Education à la vie', re: /\bvie\b/i, sup: true },
+    civ:       { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    anglais:   { nom: 'Anglais', re: /anglais/i },
+    biologie:  { nom: 'Biologie', re: /biolog/i },
+    chimie:    { nom: 'Chimie', re: /chimie/i },
+    coutInd:   { nom: 'Couture industrielle', re: /couture.*industr/i },
+    dessArt:   { nom: 'Dessin artistique', re: /dessin.*artist/i },
+    dessTech:  { nom: 'Dessin technique', re: /dessin.*techni/i },
+    educFam:   { nom: 'Educ. famil. puériculture', re: /famil|pu[ée]ricul/i },
+    educPhys:  { nom: 'Education physique', re: /[ée]duc.*phys|ed\..*phys|sport/i },
+    geo:       { nom: 'Géographie', re: /g[ée]ograph/i, sup: true },
+    histActu:  { nom: 'Histoire / question d’actualité', re: /histoir|actualit/i, sup: true },
+    actu:      { nom: 'Question d’actualité', re: /actualit/i },
+    info:      { nom: 'Informatique', re: /informati/i },
+    maths:     { nom: 'Mathématiques', re: /math/i },
+    physBio:   { nom: 'Physique / Biologie', re: /^(?!.*(educ|ed\.|sport)).*(physique|biolog)/i },
+    physique:  { nom: 'Physique', re: /^(?!.*(educ|ed\.|sport)).*physique/i },
+    sciAppl:   { nom: 'Sciences appliquées', re: /science.*appliq/i },
+    socaf:     { nom: 'Socaf / essayage moul.', re: /socaf|essayage|moulage/i, sup: true },
+    essayage:  { nom: 'Essayage moulage', re: /essayage|moulage/i },
+    technoSpe: { nom: 'Techno. de la spécialité', re: /techno.*sp[ée]cial/i },
+    technoTex: { nom: 'Techno. des textiles', re: /techno.*textile/i },
+    travMen:   { nom: 'Travaux ménagers', re: /m[ée]nag/i },
+    coupe:     { nom: 'Coupe', re: /\bcoupe\b/i },
+    exTech:    { nom: 'Exercices techniques', re: /exercice/i },
+    coutArt:   { nom: 'Couture artisanale', re: /couture.*artisan/i },
+    francais:  { nom: 'Français', re: /fran[çc]ais/i }
+  };
+
+  /* ---------- IEP-CC-12 (1ère et 2ème Coupe et Couture) ---------- */
+  const GROUPES_CC12 = [
+    { max: { p: 10, ex: 20 },  matieres: [CC.religion, CC.vie, CC.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [CC.anglais, CC.chimie, CC.coutInd, CC.dessArt, CC.dessTech, CC.educPhys, CC.geo, CC.histActu, CC.info, CC.physBio, CC.sciAppl, CC.socaf, CC.technoSpe, CC.technoTex] },
+    { max: { p: 20, ex: 0 },   noEx: true, matieres: [CC.travMen] },
+    { max: { p: 40, ex: 0 },   noEx: true, matieres: [CC.coupe, CC.exTech, CC.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CC.coutArt] },
+    { max: { p: 50, ex: 100 }, matieres: [CC.francais] }
+  ];
+
+  /* ---------- IEP-CC-3 (3ème Coupe et Couture) ---------- */
+  const GROUPES_CC3 = [
+    { max: { p: 10, ex: 20 },  matieres: [{ nom: 'Religion', re: /relig/i, sup: true }, CC.vie, CC.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [CC.anglais, CC.biologie, CC.chimie, CC.dessArt, CC.educFam, CC.educPhys, CC.info, CC.maths, CC.physique, CC.actu, CC.technoSpe, CC.technoTex] },
+    { max: { p: 40, ex: 80 },  matieres: [CC.coupe, CC.coutInd, CC.dessTech, CC.essayage, CC.exTech, CC.francais] },
+    { max: { p: 40, ex: 0 },   noEx: true, matieres: [CC.coutArt] }
+  ];
+
+  /* ---------- IEP-CC-4 (4ème Coupe et Couture · Examen d'Etat) ---------- */
+  const GROUPES_CC4 = [
+    { max: { p: 10, ex: 20 },  matieres: [CC.religion, CC.vie, CC.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [CC.anglais, CC.biologie, CC.dessArt, CC.educFam, CC.educPhys, CC.info, CC.maths, CC.physique, CC.actu, CC.technoSpe, CC.technoTex] },
+    { max: { p: 40, ex: 80 },  matieres: [CC.coupe, CC.coutInd, CC.dessTech, CC.essayage, CC.exTech, CC.francais] },
+    { max: { p: 40, ex: 0 },   noEx: true, matieres: [CC.coutArt] }
+  ];
+
   /* ---------- Modèle IGE-004 (Degré élémentaire · 1ère et 2e année) ----------
      Ce bulletin est par TRIMESTRE (3 trimestres), avec des domaines, des
      sous-groupes et des sous-totaux : il a donc une « structure » (liste de
@@ -670,6 +729,50 @@
       blkBas: false,
       maxGenDetail: true,
       groupes: GROUPES_116
+    },
+    'IEP-CC-12': {
+      label: '1ère / 2ème · Coupe et Couture',
+      ref: 'IEP/CC/1-2',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup>, 2<sup>ème</sup> (1) ANNEE COUPE ET COUTURE',
+      province: 'PROVINCE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 17,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_CC12
+    },
+    'IEP-CC-3': {
+      label: '3ème · Coupe et Couture',
+      ref: 'IEP/CC/3',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE COUPE ET COUTURE',
+      province: 'PROVINCE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_CC3
+    },
+    'IEP-CC-4': {
+      label: '4ème · Coupe et Couture',
+      ref: 'IEP/CC/4',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE COUPE ET COUTURE',
+      province: 'PROVINCE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 18,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_CC4
     }
     /* ➕ ÉTAPE 2 (nouveau modèle) : ajoute une virgule après le bloc ci-dessus,
        puis colle et complète :
@@ -1254,12 +1357,12 @@
       ov.className = 'bulletin-overlay';
       document.body.appendChild(ov);
     }
-      ov.innerHTML = `
-      <div class="bo-bar">
-        <button onclick="window.print()">🖨 Imprimer / PDF</button>
-        <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
-      </div>
-      <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
+    ov.innerHTML = `
+  <div class="bo-bar">
+    <button onclick="window.print()">🖨 Imprimer / PDF</button>
+    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
+  </div>
+  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
     ov.classList.add('show');
     fitOverlay();
     window.scrollTo(0, 0);
