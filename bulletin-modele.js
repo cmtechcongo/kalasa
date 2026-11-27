@@ -6,6 +6,8 @@
              IGE-042 à IGE-045 (Commerciale & Gestion 1ère → 4ème)
              IGE-113 à IGE-116 (Electricité générale 1ère → 4ème)
              IEP-CC-12 · IEP-CC-3 · IEP-CC-4 (Coupe et Couture : 1ère/2ème, 3ème, 4ème)
+             HS-1 · HS-2 · HS-3 (Humanités Scientifiques 1ère, 2ème, 3ème · IGE/P.S./012)
+             IGE-153 à 156 (Mécanique automobile) · IGE-117 à 119 (Construction) · IGE-105 à 108 (Nutrition)
    Le modèle utilisé dépend du champ "modeleBulletin" de la classe
    (choisi dans classe.html : la liste se remplit toute seule).
    Toutes les classes d'un même niveau (1ère A, 1ère B, 1ère C…) choisissent
@@ -459,6 +461,265 @@
     { max: { p: 40, ex: 0 },   noEx: true, matieres: [CC.coutArt] }
   ];
 
+  /* ---------- Humanités Scientifiques (IGE/P.S./012) : bulletin par domaines ----------
+     Même principe que STRUCTURE_004, mais par SEMESTRE.
+       max: { p, ex, tot?, ps? }
+         p   : maximum « travaux journaliers » imprimé
+         ex  : maximum examen
+         tot : maximum du semestre (par défaut 2×p + ex)
+         ps  : maximum réel de chaque période pour le calcul (par défaut p) */
+  const HS_PHYS = /^(?!.*(sport|[ée]duc|ed\.)).*physique/i;
+  const hsCommun = [
+    { gr: 'Sous-domaine des Sciences Physiques, Technologie et TIC' },
+    { nom: 'Chimie', re: /chimie/i, max: { p: 30, ex: 60 } },
+    { nom: 'Physique', re: HS_PHYS, max: { p: 30, ex: 60 } },
+    { nom: 'Tech. d’Info et Com (TIC)', re: /\btic\b|informati/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-Total' },
+    { dm: 'DOMAINE DES LANGUES' },
+    { nom: 'Français', re: /fran[çc]ais/i, max: { p: 50, ex: 100 } },
+    { nom: 'Anglais', re: /anglais/i, max: { p: 30, ex: 60 } },
+    { st: 'Sous-Total' },
+    { dm: 'DOMAINE DE L’UNIVERS SOCIAL ET ENVIRONNEMENT' },
+    { nom: 'Ed. civ. & morale', re: /civ|morale/i, max: { p: 10, ex: 20 } },
+    { nom: 'Géographie', re: /g[ée]ograph/i, max: { p: 20, ex: 40 } },
+    { nom: 'Histoire', re: /histoir/i, max: { p: 20, ex: 40 } },
+    { nom: 'Education à la vie', re: /\bvie\b/i, max: { p: 10, ex: 20 }, sup: true },
+    { nom: 'Sociologie africaine', re: /sociolog/i, max: { p: 20, ex: 40 } },
+    { nom: 'Religion', re: /relig/i, max: { p: 10, ex: 20 }, sup: true },
+    { st: 'Sous-Total' },
+    { dm: 'DOMAINE DU DEVELOPPEMENT PERSONNEL' },
+    { nom: 'Educat. phys. & sport.', re: /[ée]duc.*phys|ed\..*phys|sport/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-Total' }
+  ];
+
+  /* 1ère et 2ème année : même structure */
+  const STRUCTURE_HS12 = [
+    { dm: 'DOMAINE DES SCIENCES' },
+    { gr: 'Sous-domaine des Mathématiques' },
+    { nom: 'Algèbre, Stat. & Analy.', re: /alg[èe]bre|analyse/i, max: { p: 40, ex: 80 } },
+    { nom: 'Géométrie et Trigo.', re: /g[ée]om[ée]tri|trigo/i, max: { p: 20, ex: 40 } },
+    { nom: 'Dessin scientifique', re: /dessin/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-Total' },
+    { gr: 'Sous-domaine des Sciences de la Vie et de la Terre' },
+    { nom: 'Biologie générale', re: /^(?!.*micro).*biolog/i, max: { p: 20, ex: 40 } },
+    { nom: 'Microbiologie', re: /microbio/i, max: { p: 10, ex: 20 } },
+    { nom: 'Géologie', re: /g[ée]olog/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-Total' }
+  ].concat(hsCommun);
+
+  /* 3ème année */
+  const STRUCTURE_HS3 = [
+    { dm: 'DOMAINE DES SCIENCES' },
+    { gr: 'Sous-domaine des Mathématiques' },
+    { nom: 'Algèbre, Stat. & Analy.', re: /alg[èe]bre|analyse/i, max: { p: 30, ex: 60 } },
+    { nom: 'Géométrie', re: /g[ée]om[ée]tri/i, max: { p: 20, ex: 40 } },
+    { nom: 'Trigo. & Statistiques', re: /trigo|statistiq/i, max: { p: 10, ex: 20 } },
+    { nom: 'Dessin scientifique', re: /dessin/i, max: { p: 10, ex: 20 } },
+    { st: 'Sous-Total' },
+    { gr: 'Sous-domaine des Sciences de la Vie et de la Terre' },
+    { nom: 'Biologie générale', re: /biolog/i, max: { p: 20, ex: 40 } },
+    // Valeurs imprimées sur le papier officiel (20 / 20 / 40) : ps = 10 par période pour rester dans le total
+    { nom: 'Systématique et Jardin.', re: /syst[ée]matique|jardin/i, max: { p: 20, ex: 20, tot: 40, ps: 10 } },
+    { nom: 'Géologie / Ecologie', re: /g[ée]olog|[ée]colog/i, max: { p: 20, ex: 20, tot: 40, ps: 10 } },
+    { st: 'Sous-Total' }
+  ].concat(hsCommun);
+
+  /* ---------- Mécanique automobile : matières communes (IGE-153 à 156) ---------- */
+  const MA = {
+    religion:  { nom: 'Religion', re: /relig/i, sup: true },
+    vie:       { nom: 'Education à la Vie', re: /\bvie\b/i },
+    civ:       { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    histoire:  { nom: 'Histoire', re: /histoir/i },
+    geo:       { nom: 'Géographie', re: /g[ée]ograph/i },
+    physique:  { nom: 'Physique', re: /^(?!.*(sport|[ée]duc|ed\.)).*physique/i },
+    chimie:    { nom: 'Chimie', re: /chimie/i },
+    info:      { nom: 'Informatique', re: /informati/i },
+    metal:     { nom: 'Métallurgie', re: /m[ée]tallurg/i },
+    actu:      { nom: 'Actualités', re: /actualit/i },
+    anglais:   { nom: 'Anglais', re: /anglais/i },
+    electro:   { nom: 'Electronique', re: /[ée]lectronique/i },
+    technoAuto:{ nom: 'Techno. automobile', re: /techno.*auto/i },
+    elecGen:   { nom: 'Electricité générale', re: /^(?!.*auto).*[ée]lectricit/i },
+    elecAuto:  { nom: 'Electricité auto.', re: /[ée]lectricit.*auto/i },
+    dessInd:   { nom: 'Dessin industriel', re: /dessin/i },
+    mecGen:    { nom: 'Mécanique générale', re: /^(?!.*(appliqu|techno)).*m[ée]canique/i },
+    technoAj:  { nom: 'Techno. ajustage', re: /techno.*ajust/i },
+    francais:  { nom: 'Français', re: /fran[çc]ais/i },
+    maths:     { nom: 'Mathématiques', re: /math/i },
+    tpLabo:    { nom: 'T.P. labo.', re: /labo/i },
+    atelierAj: { nom: 'Atelier ajustage', re: /^(?!.*techno).*ajust/i },
+    connMat:   { nom: 'Connaiss. des matériaux', re: /connaiss.*mat|mat[ée]riaux/i },
+    ecoProf:   { nom: 'Economie professionnelle', re: /[ée]conom/i },
+    moteur:    { nom: 'Moteur thermique', re: /moteur/i },
+    automation:{ nom: 'Automation', re: /automation/i },
+    thp:       { nom: 'T.H.P.', re: /t\.?h\.?p\b|hydro|pneumat/i },
+    elemMach:  { nom: 'Eléments des machines', re: /[ée]l[ée]ments?.*machine/i },
+    resist:    { nom: 'Résistance matérielle', re: /r[ée]sist/i },
+    mecAppl:   { nom: 'Mécanique appliquée', re: /m[ée]canique.*appliqu/i },
+    automate:  { nom: 'Automate programmable', re: /automate|programm/i },
+    organ:     { nom: 'Organisation', re: /organis/i },
+    construct: { nom: 'Construction', re: /^(?!.*techno).*construction/i },
+    atelierAuto:{ nom: 'Atelier Auto.', re: /atelier|pratique/i }
+  };
+
+  /* IGE-153 : 1ère */
+  const GROUPES_153 = [
+    { max: { p: 10, ex: 20 },  matieres: [MA.religion, MA.vie, MA.civ, MA.histoire, MA.geo, MA.physique, MA.chimie, MA.info, MA.metal] },
+    { max: { p: 20, ex: 40 },  matieres: [MA.anglais, MA.electro, MA.technoAuto] },
+    { max: { p: 30, ex: 60 },  matieres: [MA.elecGen, MA.dessInd, MA.mecGen, MA.technoAj] },
+    { max: { p: 40, ex: 80 },  matieres: [MA.francais] },
+    { max: { p: 50, ex: 100 }, matieres: [MA.maths] },
+    { max: { p: 50, ex: 0 },   noEx: true, matieres: [MA.tpLabo, MA.atelierAj] }
+  ];
+  /* IGE-154 : 2ème */
+  const GROUPES_154 = [
+    { max: { p: 10, ex: 20 },  matieres: [MA.religion, MA.vie, MA.civ, MA.physique, MA.metal, MA.info, MA.actu] },
+    { max: { p: 20, ex: 40 },  matieres: [MA.anglais, MA.chimie, MA.connMat, MA.ecoProf, MA.electro, MA.elecGen, MA.moteur, MA.technoAuto] },
+    { max: { p: 30, ex: 60 },  matieres: [MA.dessInd, MA.mecGen] },
+    { max: { p: 40, ex: 80 },  matieres: [MA.francais, MA.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [MA.tpLabo] }
+  ];
+  /* IGE-155 : 3ème */
+  const GROUPES_155 = [
+    { max: { p: 10, ex: 20 },  matieres: [MA.religion, MA.vie, MA.civ, MA.automation, MA.thp, MA.anglais, MA.metal, MA.info, MA.actu] },
+    { max: { p: 20, ex: 40 },  matieres: [MA.technoAuto, MA.moteur, MA.elemMach, MA.electro, MA.resist, MA.mecAppl, MA.elecAuto, MA.automate] },
+    { max: { p: 30, ex: 60 },  matieres: [MA.dessInd, MA.francais] },
+    { max: { p: 40, ex: 80 },  matieres: [MA.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [MA.atelierAuto] }
+  ];
+  /* IGE-156 : 4ème · Examen d'Etat */
+  const GROUPES_156 = [
+    { max: { p: 10, ex: 20 },  matieres: [MA.religion, MA.vie, MA.civ, MA.anglais, MA.info, MA.actu, MA.electro] },
+    { max: { p: 20, ex: 40 },  matieres: [{ nom: 'Résist.+ Eléments matér.', re: /r[ée]sist/i }, MA.mecAppl, MA.organ, MA.construct] },
+    { max: { p: 30, ex: 60 },  matieres: [MA.dessInd] },
+    { max: { p: 40, ex: 80 },  matieres: [MA.elecAuto, MA.moteur, MA.technoAuto] },
+    { max: { p: 50, ex: 100 }, matieres: [MA.francais, MA.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [MA.atelierAuto] }
+  ];
+
+  /* ---------- Construction : matières communes (IGE-117 à 119) ---------- */
+  const CO = {
+    religion:  { nom: 'Religion', re: /relig/i, sup: true },
+    vie:       { nom: 'Education à la Vie', re: /\bvie\b/i },
+    civ:       { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    anglais:   { nom: 'Anglais', re: /anglais/i },
+    chimie:    { nom: 'Chimie', re: /chimie/i },
+    connMat:   { nom: 'Connaissance des matér.', re: /connaiss.*mat|mat[ée]riaux/i },
+    geoAct:    { nom: 'Géographie / actualités', re: /g[ée]ograph|actualit/i },
+    actu:      { nom: 'Actualités', re: /actualit/i },
+    graphost:  { nom: 'Graphostatique', re: /graphostat/i },
+    histoire:  { nom: 'Histoire', re: /histoir/i },
+    info:      { nom: 'Informatique', re: /informati/i },
+    mecAppl:   { nom: 'Mécanique appliquée', re: /m[ée]canique.*appliqu/i },
+    mecanique: { nom: 'Mécanique', re: /^(?!.*appliqu).*m[ée]canique/i },
+    physique:  { nom: 'Physique', re: /^(?!.*(sport|[ée]duc|ed\.)).*physique/i },
+    rdm:       { nom: 'Résistance des matériaux', re: /r[ée]sistance/i },
+    technoCst: { nom: 'Techno. de construction', re: /techno.*construct/i },
+    topo:      { nom: 'Topographie', re: /topograph/i },
+    voies:     { nom: 'Voies de communication', re: /voies?.*communic/i },
+    dessCst:   { nom: 'Dessin de construction', re: /dessin/i },
+    francais:  { nom: 'Français', re: /fran[çc]ais/i },
+    maths:     { nom: 'Mathématiques', re: /math/i },
+    pratique:  { nom: 'Pratique professionnelle', re: /pratique|stage/i },
+    assain:    { nom: 'Assainissement', re: /assainiss/i },
+    beton:     { nom: 'Béton armé', re: /b[ée]ton/i },
+    elec:      { nom: 'Electricité', re: /[ée]lectricit/i },
+    outChant:  { nom: 'Outillage de chantier', re: /outillage/i },
+    procedes:  { nom: 'Procédés des construct.', re: /proc[ée]d[ée]s/i },
+    edPhys:    { nom: 'Éd. Physique & sportive', re: /[ée]duc.*phys|ed\..*phys|sport/i },
+    legis:     { nom: 'Législation', re: /l[ée]gislat/i },
+    organ:     { nom: 'Organisation', re: /organis/i },
+    technolo:  { nom: 'Technologie', re: /technolog/i },
+    dessin:    { nom: 'Dessin', re: /dessin/i }
+  };
+  /* IGE-117 : 1ère et 2ème (bulletin commun) */
+  const GROUPES_117 = [
+    { max: { p: 10, ex: 20 },  matieres: [CO.religion, CO.vie, CO.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [CO.anglais, CO.chimie, CO.connMat, CO.geoAct, CO.graphost, CO.histoire, CO.info, CO.mecAppl, CO.mecanique, CO.physique, CO.rdm, CO.technoCst, CO.topo, CO.voies] },
+    { max: { p: 50, ex: 100 }, matieres: [CO.dessCst, CO.francais, CO.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CO.pratique] }
+  ];
+  /* IGE-118 : 3ème */
+  const GROUPES_118 = [
+    { max: { p: 10, ex: 20 },  matieres: [CO.religion, CO.vie, CO.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [CO.actu, CO.anglais, CO.assain, CO.beton, CO.elec, CO.graphost, CO.info, CO.mecanique, CO.outChant, CO.procedes, CO.rdm, CO.technoCst, CO.topo, CO.voies] },
+    { max: { p: 50, ex: 100 }, matieres: [CO.dessCst, CO.francais, CO.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CO.pratique] }
+  ];
+  /* IGE-119 : 4ème · Examen d'Etat */
+  const GROUPES_119 = [
+    { max: { p: 10, ex: 20 },  matieres: [CO.religion, CO.civ, CO.vie] },
+    { max: { p: 20, ex: 40 },  matieres: [CO.actu, CO.anglais, CO.edPhys, CO.elec, CO.info, CO.legis, CO.organ, CO.outChant, CO.rdm, CO.technolo, CO.topo, CO.voies] },
+    { max: { p: 40, ex: 80 },  matieres: [CO.beton, CO.francais, CO.procedes] },
+    { max: { p: 50, ex: 100 }, matieres: [CO.dessin, CO.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [CO.pratique] }
+  ];
+
+  /* ---------- Nutrition : matières communes (IGE-105 à 108) ---------- */
+  const NU = {
+    religion:  { nom: 'Religion', re: /relig/i, sup: true },
+    vie:       { nom: 'Education à la Vie', re: /\bvie\b/i },
+    civ:       { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    edPhys:    { nom: 'Education phys. & sportive', re: /[ée]duc.*phys|ed\..*phys|sport/i },
+    geo:       { nom: 'Géographie', re: /g[ée]ograph/i },
+    histoire:  { nom: 'Histoire', re: /histoir/i },
+    hygAlim:   { nom: 'Hygiène alimentaire', re: /hygi[èe]ne/i },
+    info:      { nom: 'Informatique', re: /informati/i },
+    anglais:   { nom: 'Anglais', re: /anglais/i },
+    chimie:    { nom: 'Chimie', re: /chimie/i },
+    nutGen:    { nom: 'Nutrition générale', re: /nutrition.*g[ée]n/i },
+    physique:  { nom: 'Physique', re: /^(?!.*(sport|[ée]duc|ed\.)).*physique/i },
+    technoAl:  { nom: 'Technologie alimentaire', re: /technolog.*aliment/i },
+    biologie:  { nom: 'Biologie', re: /^(?!.*micro).*biolog/i },
+    agri:      { nom: 'Agriculture', re: /agricult/i },
+    francais:  { nom: 'Français', re: /fran[çc]ais/i },
+    maths:     { nom: 'Mathématiques', re: /math/i },
+    pratique:  { nom: 'Pratique professionnelle', re: /pratique/i },
+    technoCul: { nom: 'Technologie culinaire', re: /culinaire/i },
+    educNut:   { nom: 'Education nutritionnelle', re: /[ée]ducation.*nutri/i },
+    pathNut:   { nom: 'Pathologie de la nutrition', re: /pathologi/i },
+    zoo:       { nom: 'Zootechnie (élevage)', re: /zootechn|[ée]levage/i },
+    ecoAlim:   { nom: 'Economie alimentaire', re: /[ée]conom/i },
+    enquete:   { nom: 'Enquête nutritionnelle', re: /enqu[êe]te/i },
+    entrep:    { nom: 'Entrepreneuriat', re: /entrepr/i },
+    microAl:   { nom: 'Microbiologie alimentaire', re: /microbio/i },
+    anatomie:  { nom: 'Anatomie & physiologie', re: /anatomie|physiolog/i },
+    dietet:    { nom: 'Diététique', re: /di[ée]t[ée]tique/i },
+    stage:     { nom: 'Stage', re: /stage/i }
+  };
+  /* IGE-105 : 1ère */
+  const GROUPES_105 = [
+    { max: { p: 10, ex: 20 },  matieres: [NU.religion, NU.vie, NU.civ, sup(NU.edPhys), NU.geo, NU.histoire, NU.hygAlim, sup(NU.info)] },
+    { max: { p: 20, ex: 40 },  matieres: [NU.anglais, NU.chimie, NU.nutGen, NU.physique, NU.technoAl] },
+    { max: { p: 30, ex: 60 },  matieres: [NU.biologie] },
+    { max: { p: 40, ex: 80 },  matieres: [NU.agri] },
+    { max: { p: 60, ex: 120 }, matieres: [NU.francais, NU.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [NU.pratique] }
+  ];
+  /* IGE-106 : 2ème */
+  const GROUPES_106 = [
+    { max: { p: 10, ex: 20 },  matieres: [NU.religion, NU.vie, NU.civ, sup(NU.edPhys), NU.geo, NU.histoire, NU.hygAlim, NU.info, NU.technoCul] },
+    { max: { p: 20, ex: 40 },  matieres: [NU.anglais, NU.chimie, NU.educNut, NU.physique] },
+    { max: { p: 30, ex: 60 },  matieres: [NU.biologie, NU.nutGen, NU.pathNut, NU.technoAl, NU.zoo] },
+    { max: { p: 50, ex: 100 }, matieres: [NU.francais, NU.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [NU.pratique] }
+  ];
+  /* IGE-107 : 3ème */
+  const GROUPES_107 = [
+    { max: { p: 10, ex: 20 },  matieres: [NU.religion, NU.vie, NU.civ, sup(NU.edPhys), NU.geo, NU.histoire, NU.info] },
+    { max: { p: 20, ex: 40 },  matieres: [NU.anglais, NU.chimie, NU.ecoAlim, NU.enquete, NU.entrep, NU.microAl, NU.physique] },
+    { max: { p: 30, ex: 60 },  matieres: [NU.anatomie, NU.biologie, NU.dietet, NU.technoCul] },
+    { max: { p: 40, ex: 80 },  matieres: [NU.francais, NU.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [NU.pratique, NU.stage] }
+  ];
+  /* IGE-108 : 4ème · Examen d'Etat */
+  const GROUPES_108 = [
+    { max: { p: 10, ex: 20 },  matieres: [NU.religion, NU.vie, NU.civ, NU.edPhys, NU.geo, NU.histoire, NU.info, NU.physique] },
+    { max: { p: 20, ex: 40 },  matieres: [NU.anglais, NU.chimie, NU.entrep] },
+    { max: { p: 30, ex: 60 },  matieres: [NU.anatomie, NU.dietet, NU.francais, NU.maths, NU.technoCul] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [NU.pratique] }
+  ];
+
   /* ---------- Modèle IGE-004 (Degré élémentaire · 1ère et 2e année) ----------
      Ce bulletin est par TRIMESTRE (3 trimestres), avec des domaines, des
      sous-groupes et des sous-totaux : il a donc une « structure » (liste de
@@ -773,6 +1034,187 @@
       blkBas: false,
       maxGenDetail: true,
       groupes: GROUPES_CC4
+    },
+    'HS-1': {
+      type: 'domaines',
+      label: '1ère HS · Scientifique',
+      ref: 'IGE/P.S./012',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup> ANNEE DES HUMANITES SCIENTIFIQUES',
+      structure: STRUCTURE_HS12
+    },
+    'HS-2': {
+      type: 'domaines',
+      label: '2ème HS · Scientifique',
+      ref: 'IGE/P.S./012',
+      titre: 'BULLETIN DE LA 2<sup>ème</sup> ANNEE DES HUMANITES SCIENTIFIQUES',
+      structure: STRUCTURE_HS12
+    },
+    'HS-3': {
+      type: 'domaines',
+      label: '3ème HS · Scientifique',
+      ref: 'IGE/P.S./012',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE DES HUMANITES SCIENTIFIQUES',
+      structure: STRUCTURE_HS3
+    },
+    'IGE-153': {
+      label: '1ère HP · Mécanique automobile',
+      ref: 'IGE/P.S./153',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup> ANNEE HUMANITES / MECANIQUE AUTOMOBILE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_153
+    },
+    'IGE-154': {
+      label: '2ème HP · Mécanique automobile',
+      ref: 'IGE/P.S./154',
+      titre: 'BULLETIN DE LA 2<sup>ème</sup> ANNEE HUMANITES / MECANIQUE AUTOMOBILE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_154
+    },
+    'IGE-155': {
+      label: '3ème HP · Mécanique automobile',
+      ref: 'IGE/P.S./155',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES / MECANIQUE AUTOMOBILE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_155
+    },
+    'IGE-156': {
+      label: '4ème HP · Mécanique automobile',
+      ref: 'IGE/P.S./156',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES / MECANIQUE AUTOMOBILE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 18,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_156
+    },
+    'IGE-117': {
+      label: '1ère / 2ème HP · Construction',
+      ref: 'IGE/P.S./117',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup>, 2<sup>ème</sup> (1) ANNEE HUMANITES / CONSTRUCTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_117
+    },
+    'IGE-118': {
+      label: '3ème HP · Construction',
+      ref: 'IGE/P.S./118',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES / CONSTRUCTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_118
+    },
+    'IGE-119': {
+      label: '4ème HP · Construction',
+      ref: 'IGE/P.S./119',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES / CONSTRUCTION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 18,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_119
+    },
+    'IGE-105': {
+      label: '1ère HP · Nutrition',
+      ref: 'IGE/P.S./105',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup> ANNEE HUMANITES / NUTRITION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_105
+    },
+    'IGE-106': {
+      label: '2ème HP · Nutrition',
+      ref: 'IGE/P.S./106',
+      titre: 'BULLETIN DE LA 2<sup>ème</sup> ANNEE HUMANITES / NUTRITION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_106
+    },
+    'IGE-107': {
+      label: '3ème HP · Nutrition',
+      ref: 'IGE/P.S./107',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES / NUTRITION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 17,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_107
+    },
+    'IGE-108': {
+      label: '4ème HP · Nutrition',
+      ref: 'IGE/P.S./108',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES / NUTRITION',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 20,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_108
     }
     /* ➕ ÉTAPE 2 (nouveau modèle) : ajoute une virgule après le bloc ci-dessus,
        puis colle et complète :
@@ -1096,6 +1538,164 @@
 </div>`;
   }
 
+  /* ---------- Rendu « Humanités Scientifiques » (par domaines, 2 semestres) ---------- */
+  function renderDomaines(data, M) {
+    const {
+      eleve = {}, classe = {}, etab = {}, annee = '',
+      notes = {}, matieres = [], rang = '', nEleves = ''
+    } = data;
+
+    const used = new Set();
+    const items = M.structure.map(it => {
+      if (!it.nom) return it;
+      const mk = matieres.find(m => !used.has(m.id) && it.re.test(m.nom));
+      if (mk) used.add(mk.id);
+      return Object.assign({}, it, { matK: mk || null });
+    });
+    const autres = matieres.filter(m => !used.has(m.id));
+    if (autres.length) {
+      items.push({ gr: 'AUTRES MATIERES' });
+      autres.forEach(m => items.push({ nom: m.nom, matK: m, max: { p: 20, ex: 40 } }));
+      items.push({ st: 'Sous-Total' });
+    }
+
+    const mt = m => m.tot !== undefined ? m.tot : m.p * 2 + m.ex;
+    const add = (a, b) => b === null ? a : (a === null ? b : a + b);
+    const newPts = () => ({ P: [null, null, null, null], EX: [null, null], T: [null, null], TG: null });
+    const addPts = (a, v) => {
+      v.P.forEach((x, i) => a.P[i] = add(a.P[i], x));
+      v.EX.forEach((x, i) => a.EX[i] = add(a.EX[i], x));
+      v.T.forEach((x, i) => a.T[i] = add(a.T[i], x));
+      a.TG = add(a.TG, v.TG);
+    };
+    const calc = (matK, m) => {
+      const v = newPts();
+      if (!matK) return v;
+      const maxK = +matK.max || 20;
+      const ps = m.ps !== undefined ? m.ps : m.p;
+      const get = (code, maxG) => {
+        const x = (notes[matK.id + '_' + code] || {})[eleve.id];
+        if (x === undefined || x === null || x === '' || isNaN(x)) return null;
+        return (+x / maxK) * maxG;
+      };
+      const codes = [['P1', 'P2', 'EX1'], ['P3', 'P4', 'EX2']];
+      codes.forEach((c, t) => {
+        v.P[2 * t] = get(c[0], ps);
+        v.P[2 * t + 1] = get(c[1], ps);
+        v.EX[t] = get(c[2], m.ex);
+        const parts = [v.P[2 * t], v.P[2 * t + 1], v.EX[t]];
+        v.T[t] = parts.some(x => x !== null) ? parts.reduce((s, x) => s + (x || 0), 0) : null;
+      });
+      v.TG = v.T.some(x => x !== null) ? v.T.reduce((s, x) => s + (x || 0), 0) : null;
+      return v;
+    };
+    const f = v => v === null ? '' : String(Math.round(v * 10) / 10);
+
+    // 19 colonnes : libellé + 2×7 (semestres) + 2 (T.G.) + 2 (repêchage)
+    const cells = (m, v) => {
+      const T = mt(m);
+      let h = '';
+      for (let t = 0; t < 2; t++) {
+        h += `<td>${m.p}</td><td>${f(v.P[2 * t])}</td><td>${f(v.P[2 * t + 1])}</td><td>${m.ex}</td><td>${f(v.EX[t])}</td><td>${T}</td><td>${f(v.T[t])}</td>`;
+      }
+      return h + `<td>${T * 2}</td><td>${f(v.TG)}</td><td></td><td></td>`;
+    };
+
+    let tbody = '';
+    let seg = newPts(), segM = { p: 0, ex: 0, tot: 0 };
+    const tot = newPts(), gen = { p: 0, ex: 0, tot: 0 };
+    const mxT = [0, 0];
+    let mxTG = 0;
+
+    items.forEach(it => {
+      if (it.dm) { tbody += `<tr class="dm"><td colspan="19">${esc(it.dm)}</td></tr>`; return; }
+      if (it.gr) { tbody += `<tr class="gr"><td colspan="19">${esc(it.gr)}</td></tr>`; return; }
+      if (it.st) {
+        tbody += `<tr class="st"><td class="br">${esc(it.st)}</td>${cells({ p: segM.p, ex: segM.ex, tot: segM.tot }, seg)}</tr>`;
+        seg = newPts(); segM = { p: 0, ex: 0, tot: 0 };
+        return;
+      }
+      const v = calc(it.matK, it.max);
+      const T = mt(it.max);
+      addPts(seg, v); addPts(tot, v);
+      segM.p += it.max.p; segM.ex += it.max.ex; segM.tot += T;
+      gen.p += it.max.p; gen.ex += it.max.ex; gen.tot += T;
+      v.T.forEach((x, t) => { if (x !== null) mxT[t] += T; });
+      if (v.TG !== null) mxTG += T * 2;
+      tbody += `<tr><td class="br">${esc(it.nom)}${it.sup ? ' <sup>(1)</sup>' : ''}</td>${cells(it.max, v)}</tr>`;
+    });
+
+    const H = '<td class="hat"></td>', E = '<td></td>';
+    // Maxima généraux (sans points) et totaux (points)
+    const semMax = `<td>${gen.p}</td>${E}${E}<td>${gen.ex}</td>${E}<td>${gen.tot}</td>${E}`;
+    tbody += `<tr class="st"><td class="br">MAXIMA GENERAUX</td>${semMax}${semMax}<td>${gen.tot * 2}</td>${E}${E}${E}</tr>`;
+    const bas = (label, tv, tg) => {
+      const t = i => `<td>${tv ? tv[i] : ''}</td>`;
+      const sem = i => `${H}${E}${E}${H}${E}${H}${t(i)}`;
+      return `<tr class="ht"><td class="br">${label}</td>${sem(0)}${sem(1)}${H}<td>${tg || ''}</td>${E}${E}</tr>`;
+    };
+    const pts = (a) => a === null ? '' : f(a);
+    const pct = (a, b) => (a !== null && b) ? n2(a / b * 100) + '%' : '';
+    // TOTAUX : points obtenus (colonnes MAX hachurées)
+    tbody += `<tr class="st"><td class="br">TOTAUX</td>${[0, 1].map(t => `${H}<td>${pts(tot.P[2 * t])}</td><td>${pts(tot.P[2 * t + 1])}</td>${H}<td>${pts(tot.EX[t])}</td>${H}<td>${pts(tot.T[t])}</td>`).join('')}${H}<td>${pts(tot.TG)}</td>${E}${E}</tr>`;
+    tbody += bas('POURCENTAGE', [0, 1].map(i => pct(tot.T[i], mxT[i])), pct(tot.TG, mxTG));
+    tbody += bas('PLACE / NBRE D’ELEVES', null, rang ? esc(rang) + '/' + esc(nEleves) : '/');
+    tbody += bas('APPLICATION');
+    tbody += bas('CONDUITE');
+    tbody += bas('SIGNATURE');
+
+    const idCases = Array.from({ length: 20 }, () => '<i></i>').join('');
+    const codeCases = Array.from({ length: 9 }, () => '<i></i>').join('');
+    const permCases = Array.from({ length: 13 }, () => '<i></i>').join('');
+
+    const w = [30, 28, 28, 30, 32, 32, 34];
+    const sem = w.map(x => `<col style="width:${x}px">`).join('');
+    const colgroup = `<colgroup><col style="width:170px">${sem}${sem}<col style="width:34px"><col style="width:36px"><col style="width:36px"><col style="width:48px"></colgroup>`;
+    const subH = (a, b) => `<th>MAX</th><th>${a}</th><th>${b}</th><th>MAX<br>EX.</th><th>EXAM.</th><th>MAX<br>TOT.</th><th>TOTAL</th>`;
+    const thead = `<thead>
+<tr><th class="br" rowspan="2">BRANCHES</th><th colspan="7">PREMIER SEMESTRE</th><th colspan="7">SECOND SEMESTRE</th><th colspan="2">TOTAL GENERAL</th><th colspan="2">EXAMEN DE REPECHAGE</th></tr>
+<tr>${subH('1<sup>ère</sup>P.', '2<sup>e</sup>P.')}${subH('3<sup>e</sup>P.', '4<sup>e</sup>P.')}<th>MAX</th><th>PTS</th><th>%</th><th>SIGN.<br>PROF.</th></tr>
+</thead>`;
+
+    return `
+<div class="bulletin elem" id="bulletin-${esc(M.ref.replace(/[^0-9A-Za-z]+/g, '-'))}">
+  <img class="wm" src="filigrane.jpg" alt="">
+  <div class="hd">
+    <img class="flag" src="drapeau.png" alt="Drapeau RDC">
+    <div class="t">REPUBLIQUE DEMOCRATIQUE DU CONGO<br>MINISTERE DE L’EDUCATION NATIONALE<br>ET NOUVELLE CITOYENNETE</div>
+    <img class="logo" src="logo.png" alt="Logo Ministère">
+  </div>
+  <div class="idr"><span class="lbl">N° ID.</span><span class="bx id">${idCases}</span></div>
+  <div class="info">
+    <div>
+      <div class="f">PROVINCE EDUCATIONNELLE :<span class="l">${esc(etab.province || '')}</span></div>
+      <div class="f">VILLE :<span class="l">${esc(etab.ville || '')}</span></div>
+      <div class="f">COMMUNE / TER. (1) :<span class="l">${esc(etab.commune || '')}</span></div>
+      <div class="f">ECOLE :<span class="l">${esc(etab.nom || '')}</span></div>
+      <div class="f bxrow">CODE : <span class="bx code">${codeCases}</span></div>
+    </div>
+    <div>
+      <div class="f">ELEVE :<span class="l">${esc([eleve.nom, eleve.postnom, eleve.prenom].filter(Boolean).join(' '))}</span> SEXE :<span class="l" style="max-width:60px">${eleve.sexe === 'M' ? 'M' : eleve.sexe === 'F' ? 'F' : ''}</span></div>
+      <div class="f">NE(E) A :<span class="l">${esc(eleve.lieuNaiss || '')}</span> LE<span class="l" style="max-width:90px">${esc(eleve.naiss || '')}</span></div>
+      <div class="f">CLASSE :<span class="l">${esc(classe.nom || '')}</span></div>
+      <div class="f bxrow">N° PERM. : <span class="bx perm">${permCases}</span></div>
+    </div>
+  </div>
+  <div class="title"><span>${M.titre}</span><span class="annee">ANNEE SCOLAIRE <span class="a">${esc(annee)}</span></span></div>
+  <table>
+    ${colgroup}
+    ${thead}
+    <tbody>${tbody}</tbody>
+  </table>
+  <div class="ft" style="display:block">
+    <div>- L’élève ne pourra passer dans la classe supérieure s’il n’a subi avec succès un examen de repêchage en <span class="dl" style="width:300px"></span> (1)</div>
+    <div style="display:flex;justify-content:space-between;margin-top:3px"><div>- L’élève passe dans la classe supérieure (1)<br>- L’élève double la classe (1)</div><div style="align-self:flex-end">Fait à <span class="dl" style="width:150px"></span> le <span class="dl" style="width:40px"></span> / <span class="dl" style="width:40px"></span> / 20<span class="dl" style="width:30px"></span></div></div>
+  </div>
+  <div class="sg"><div>Signature de l’élève</div><div>Sceau de l’Ecole</div><div>Chef d’Etablissement<br>Noms &amp; Signature</div></div>
+  <div class="note"><div>(1) Biffer la mention inutile.<br>Note importante : Le bulletin est sans valeur s’il est raturé ou surchargé.<br><i>Interdiction formelle de reproduire ce bulletin sous peine des sanctions prévues par la loi.</i></div><em>${esc(M.ref)}</em></div>
+</div>`;
+  }
+
   /* ---------- Rendu HTML ---------- */
   function render(data) {
     const {
@@ -1106,6 +1706,7 @@
     // Modèle choisi pour la classe (IGE-010 par défaut pour les anciennes classes)
     const M = MODELES[classe.modeleBulletin] || MODELES[MODELE_DEFAUT];
     if (M.type === 'elementaire') return renderElementaire(data, M);
+    if (M.type === 'domaines') return renderDomaines(data, M);
     const exEtat = !!M.examenEtat;
 
     // Construire la structure des groupes avec matières réelles
@@ -1320,60 +1921,4 @@
       <div class="f bxrow">N° PERM. : <span class="bx perm">${permCases}</span></div>
     </div>
   </div>
-  <div class="title">${M.titre}<br><span class="annee">ANNEE SCOLAIRE <span class="a">${esc(annee)}</span></span></div>
-  <table>
-    ${colgroup}
-    ${thead}
-    <tbody>${tbody}</tbody>
-  </table>
-  ${pied}
-  <div class="sg"><div>Signature de l’élève</div><div>Sceau de l’Ecole</div><div>${M.chef}</div></div>
-  <div class="note"><div>(1) Biffer la mention inutile.<br>Note importante : Le bulletin est sans valeur s’il est raturé ou surchargé.<br><i>Interdiction formelle de reproduire ce bulletin sous peine des sanctions prévues par la loi.</i></div><em>${esc(M.ref)}</em></div>
-</div>`;
-  }
-
-  /* ---------- Overlay ---------- */
-  function fitOverlay() {
-    const ov = document.getElementById('bulletinOverlay');
-    if (!ov) return;
-    const wrap = ov.querySelector('.bo-wrap');
-    const sheet = ov.querySelector('.bo-sheet');
-    if (!wrap || !sheet) return;
-    const W = 794, H = 1123;
-    const k = Math.min(1, (ov.clientWidth - 24) / W);
-    sheet.style.transform = 'scale(' + k + ')';
-    wrap.style.width = (W * k) + 'px';
-    wrap.style.height = (H * k) + 'px';
-  }
-
-  function ouvrir(data) {
-    // Garde-fou : refuse si la classe n'a pas de modèle de bulletin
-    if (!estDisponible(data && data.classe)) { alert(MOTIF_INDISPO); return false; }
-    injectCSS();
-    let ov = document.getElementById('bulletinOverlay');
-    if (!ov) {
-      ov = document.createElement('div');
-      ov.id = 'bulletinOverlay';
-      ov.className = 'bulletin-overlay';
-      document.body.appendChild(ov);
-    }
-    ov.innerHTML = `
-  <div class="bo-bar">
-    <button onclick="window.print()">🖨 Imprimer / PDF</button>
-    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
-  </div>
-  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
-    ov.classList.add('show');
-    fitOverlay();
-    window.scrollTo(0, 0);
-    return true;
-  }
-
-  window.addEventListener('resize', fitOverlay);
-
-  /* Exposé aux pages (classe.html lit MODELES ; note.html et espace-eleve.html lisent MOTIF) */
-  global.BULLETIN = {
-    estDisponible, ouvrir, render, mapMatiere,
-    MODELES, MODELE_DEFAUT, MOTIF: MOTIF_INDISPO
-  };
-})(window);
+  <div class="title">${M.titre}<br><span class="annee">ANNEE SCOLAIRE <span cla
