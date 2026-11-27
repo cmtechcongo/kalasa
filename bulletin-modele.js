@@ -4,6 +4,7 @@
    Modèles : IGE-004 (Élémentaire 1ère/2e année) · IGE-010 (1ère HP) · IGE-011 (2ème HP)
              IGE-012 (3ème HP) · IGE-013 (4ème HP)
              IGE-042 à IGE-045 (Commerciale & Gestion 1ère → 4ème)
+             IGE-113 à IGE-116 (Electricité générale 1ère → 4ème)
    Le modèle utilisé dépend du champ "modeleBulletin" de la classe
    (choisi dans classe.html : la liste se remplit toute seule).
    Toutes les classes d'un même niveau (1ère A, 1ère B, 1ère C…) choisissent
@@ -317,6 +318,88 @@
     { max: { p: 100, ex: 0 },  noEx: true, matieres: [CG.pratique] }
   ];
 
+  /* ---------- Electricité générale : matières communes (IGE-113 à 116) ---------- */
+  const EG = {
+    religion:  { nom: 'Religion', re: /relig/i, sup: true },
+    vie:       { nom: 'Education à la Vie', re: /\bvie\b/i },
+    civ:       { nom: 'Ed. civ. & morale', re: /civ|morale/i },
+    biologie:  { nom: 'Biologie', re: /biolog/i },
+    anglais:   { nom: 'Anglais', re: /anglais/i },
+    chimie:    { nom: 'Chimie', re: /chimie/i },
+    electNum:  { nom: 'Electronique numérique', re: /[ée]lectronique.*num[ée]r|num[ée]r.*[ée]lectronique/i },
+    geoAct:    { nom: 'Géographie / actualités', re: /g[ée]ograph|actualit/i },
+    actu:      { nom: 'Actualités', re: /actualit/i },
+    histoire:  { nom: 'Histoire', re: /histoir/i },
+    info:      { nom: 'Informatique', re: /informati/i },
+    mesures:   { nom: 'Instr. méth. Mesures', re: /instr|mesure/i },
+    mecanisme: { nom: 'Mécanisme', re: /m[ée]canisme/i },
+    physique:  { nom: 'Physique', re: /^(?!.*(sport|[ée]duc|ed\.)).*physique/i },
+    technoMec: { nom: 'Techno. mécanique', re: /techno.*m[ée]can/i },
+    dessElec:  { nom: 'Dessin électrique', re: /dessin.*[ée]lectr/i },
+    dessInd:   { nom: 'Dessin industriel', re: /dessin.*industr/i },
+    elecGen:   { nom: 'Electricité générale', re: /^(?!.*(dessin|techno|atelier|labo|machine|application)).*[ée]lectricit/i },
+    mecGen:    { nom: 'Mécanique générale', re: /^(?!.*(techno|appliqu)).*m[ée]canique/i },
+    technoElec:{ nom: 'Techno. électrique', re: /techno.*[ée]lectr/i },
+    electro:   { nom: 'Electronique', re: /^(?!.*num[ée]r).*[ée]lectronique/i },
+    electLabo: { nom: 'Electronique + labo.', re: /[ée]lectronique/i },
+    francais:  { nom: 'Français', re: /fran[çc]ais/i },
+    maths:     { nom: 'Mathématiques', re: /math/i },
+    automate:  { nom: 'Automate progr.', re: /automat/i },
+    resistance:{ nom: 'Résistances des matér.', re: /r[ée]sistance/i },
+    machines:  { nom: 'Machines électriques', re: /machine.*[ée]lectr/i },
+    appElec:   { nom: 'Application élect.', re: /application/i },
+    automation:{ nom: 'Automation', re: /automat/i },
+    circuit:   { nom: 'Circuit logique', re: /circuit/i },
+    legislation:{ nom: 'Législation', re: /l[ée]gislat/i },
+    organisation:{ nom: 'Organisation', re: /organis/i },
+    machineE:  { nom: 'Machine électrique', re: /machine.*[ée]lectr/i },
+    mecAppl:   { nom: 'Mécanique appliquée', re: /m[ée]canique.*appliqu/i },
+    schema:    { nom: 'Schéma', re: /sch[ée]ma/i },
+    atelierE:  { nom: 'Atelier électrique', re: /atelier.*[ée]lectr/i },
+    atelierA:  { nom: 'Atelier ajustage', re: /ajustage/i },
+    laboE:     { nom: 'Labo. électrique', re: /labo/i }
+  };
+  const sup = m => Object.assign({}, m, { sup: true });
+
+  /* ---------- Modèle IGE-113 (1ère Electricité générale) ---------- */
+  const GROUPES_113 = [
+    { max: { p: 10, ex: 20 },  matieres: [EG.religion, EG.vie, EG.civ, sup(EG.biologie)] },
+    { max: { p: 20, ex: 40 },  matieres: [EG.anglais, EG.chimie, EG.electNum, EG.geoAct, EG.histoire, EG.info, EG.mesures, EG.mecanisme, EG.physique, EG.technoMec] },
+    { max: { p: 40, ex: 80 },  matieres: [EG.dessElec, EG.dessInd, EG.elecGen, EG.mecGen, EG.technoElec, EG.electro] },
+    { max: { p: 50, ex: 100 }, matieres: [EG.francais, EG.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [EG.atelierE, EG.atelierA] }
+  ];
+
+  /* ---------- Modèle IGE-114 (2ème Electricité générale) ---------- */
+  const GROUPES_114 = [
+    { max: { p: 10, ex: 20 },  matieres: [EG.religion, EG.vie, EG.civ, sup(EG.biologie)] },
+    { max: { p: 20, ex: 40 },  matieres: [EG.anglais, EG.chimie, EG.electNum, EG.geoAct, sup(EG.histoire), EG.info, EG.mesures, EG.mecanisme, EG.physique, sup(EG.technoMec)] },
+    { max: { p: 40, ex: 80 },  matieres: [EG.dessElec, EG.dessInd, EG.elecGen, sup(EG.mecGen), EG.technoElec] },
+    { max: { p: 50, ex: 100 }, matieres: [EG.francais, EG.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [EG.atelierE, EG.laboE] }
+  ];
+
+  /* ---------- Modèle IGE-115 (3ème Electricité générale) ---------- */
+  const GROUPES_115 = [
+    { max: { p: 10, ex: 20 },  matieres: [EG.religion, EG.vie, EG.civ, sup(EG.biologie)] },
+    { max: { p: 20, ex: 40 },  matieres: [EG.actu, EG.anglais, sup(EG.automate), EG.electLabo, EG.info, EG.mesures, EG.resistance] },
+    { max: { p: 40, ex: 80 },  matieres: [EG.dessElec, EG.elecGen, EG.machines, EG.technoElec] },
+    { max: { p: 50, ex: 100 }, matieres: [EG.francais, EG.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [EG.atelierE, EG.laboE] }
+  ];
+
+  /* ---------- Modèle IGE-116 (4ème Electricité générale · Examen d'Etat) ----------
+     Sur le papier, « Labo. électrique » figure deux fois (groupe 50 et
+     travaux pratiques). La ligne du groupe 50 est laissée vide (re jamais
+     reconnue) pour ne pas compter la même matière KALASA deux fois. */
+  const GROUPES_116 = [
+    { max: { p: 10, ex: 20 },  matieres: [EG.religion, EG.vie, EG.civ] },
+    { max: { p: 20, ex: 40 },  matieres: [EG.actu, EG.anglais, EG.appElec, EG.automation, sup(EG.circuit), EG.info, sup(EG.legislation), EG.organisation] },
+    { max: { p: 40, ex: 80 },  matieres: [EG.electLabo, EG.machineE, EG.mecAppl, EG.schema] },
+    { max: { p: 50, ex: 100 }, matieres: [EG.dessElec, EG.francais, { nom: 'Labo. électrique', re: /(?!)/ }, EG.maths] },
+    { max: { p: 100, ex: 0 },  noEx: true, matieres: [EG.atelierE, EG.laboE] }
+  ];
+
   /* ---------- Modèle IGE-004 (Degré élémentaire · 1ère et 2e année) ----------
      Ce bulletin est par TRIMESTRE (3 trimestres), avec des domaines, des
      sous-groupes et des sous-totaux : il a donc une « structure » (liste de
@@ -529,6 +612,64 @@
       blkBas: false,
       maxGenDetail: true,
       groupes: GROUPES_045
+    },
+    'IGE-113': {
+      label: '1ère HP · Electricité générale',
+      ref: 'IGE/P.S./113',
+      titre: 'BULLETIN DE LA 1<sup>ère</sup> ANNEE HUMANITES / ELECTRICITE GENERALE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 17,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_113
+    },
+    'IGE-114': {
+      label: '2ème HP · Electricité générale',
+      ref: 'IGE/P.S./114',
+      titre: 'BULLETIN DE LA 2<sup>ème</sup> ANNEE HUMANITES / ELECTRICITE GENERALE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 17,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_114
+    },
+    'IGE-115': {
+      label: '3ème HP · Electricité générale',
+      ref: 'IGE/P.S./115',
+      titre: 'BULLETIN DE LA 3<sup>ème</sup> ANNEE HUMANITES / ELECTRICITE GENERALE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      rowH: 18,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_115
+    },
+    'IGE-116': {
+      label: '4ème HP · Electricité générale',
+      ref: 'IGE/P.S./116',
+      titre: 'BULLETIN DE LA 4<sup>ème</sup> ANNEE HUMANITES / ELECTRICITE GENERALE',
+      province: 'PROVINCE EDUCATIONNELLE :',
+      provLigne: false,
+      pLabels: ['2<sup>e</sup>P.', '3<sup>e</sup>P.', '4<sup>e</sup>P.'],
+      chef: 'Chef d’Etablissement,<br>Noms et Signature',
+      fait: 'Fait à ……………….……., le……/……/20……',
+      placeLabel: 'PLACE/NBRE ELEVES',
+      rowH: 17,
+      examenEtat: true,
+      blkBas: false,
+      maxGenDetail: true,
+      groupes: GROUPES_116
     }
     /* ➕ ÉTAPE 2 (nouveau modèle) : ajoute une virgule après le bloc ci-dessus,
        puis colle et complète :
@@ -1102,7 +1243,7 @@
     wrap.style.height = (H * k) + 'px';
   }
 
-function ouvrir(data) {
+  function ouvrir(data) {
     // Garde-fou : refuse si la classe n'a pas de modèle de bulletin
     if (!estDisponible(data && data.classe)) { alert(MOTIF_INDISPO); return false; }
     injectCSS();
@@ -1114,22 +1255,22 @@ function ouvrir(data) {
       document.body.appendChild(ov);
     }
     ov.innerHTML = `
-      <div class="bo-bar">
-        <button onclick="window.print()">🖨 Imprimer / PDF</button>
-        <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
-      </div>
-      <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
+  <div class="bo-bar">
+    <button onclick="window.print()">🖨 Imprimer / PDF</button>
+    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
+  </div>
+  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
     ov.classList.add('show');
     fitOverlay();
     window.scrollTo(0, 0);
     return true;
   }
 
-  window.addEventListener('resize', fitOverlay);
-
-  /* Exposé aux pages (classe.html lit MODELES ; note.html et espace-eleve.html lisent MOTIF) */
-  global.BULLETIN = {
-    estDisponible, ouvrir, render, mapMatiere,
-    MODELES, MODELE_DEFAUT, MOTIF: MOTIF_INDISPO
-  };
-})(window);
+  /* ╔══════════════════════════════════════════════════════════╗
+     ║  ⚠️ COLLE ICI LA FIN DE TON FICHIER ACTUEL                ║
+     ║  Dans ton bulletin-modele.js sur GitHub, copie les       ║
+     ║  dernières lignes qui viennent APRÈS la fonction ouvrir  ║
+     ║  (de « window.addEventListener… » ou « global.BULLETIN = │
+     ║  … » jusqu'à « })(window); ») et colle-les à la place    ║
+     ║  de ce cadre. Ne rien changer d'autre.                   ║
+     ╚══════════════════════════════════════════════════════════╝ */
