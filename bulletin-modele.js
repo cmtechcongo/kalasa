@@ -1921,4 +1921,68 @@
       <div class="f bxrow">N° PERM. : <span class="bx perm">${permCases}</span></div>
     </div>
   </div>
-  <div class="title">${M.titre}<br><span class="annee">ANNEE SCOLAIRE <span cla
+
+
+
+
+
+
+
+
+ <div class="title">${M.titre}<br><span class="annee">ANNEE SCOLAIRE <span class="a">${esc(annee)}</span></span></div>
+  <table>
+    ${colgroup}
+    ${thead}
+    <tbody>${tbody}</tbody>
+  </table>
+  ${pied}
+  <div class="sg"><div>Signature de l’élève</div><div>Sceau de l’Ecole</div><div>${M.chef}</div></div>
+  <div class="note"><div>(1) Biffer la mention inutile.<br>Note importante : Le bulletin est sans valeur s’il est raturé ou surchargé.<br><i>Interdiction formelle de reproduire ce bulletin sous peine des sanctions prévues par la loi.</i></div><em>${esc(M.ref)}</em></div>
+</div>`;
+  }
+
+  /* ---------- Overlay ---------- */
+  function fitOverlay() {
+    const ov = document.getElementById('bulletinOverlay');
+    if (!ov) return;
+    const wrap = ov.querySelector('.bo-wrap');
+    const sheet = ov.querySelector('.bo-sheet');
+    if (!wrap || !sheet) return;
+    const W = 794, H = 1123;
+    const k = Math.min(1, (ov.clientWidth - 24) / W);
+    sheet.style.transform = 'scale(' + k + ')';
+    wrap.style.width = (W * k) + 'px';
+    wrap.style.height = (H * k) + 'px';
+  }
+
+  function ouvrir(data) {
+    // Garde-fou : refuse si la classe n'a pas de modèle de bulletin
+    if (!estDisponible(data && data.classe)) { alert(MOTIF_INDISPO); return false; }
+    injectCSS();
+    let ov = document.getElementById('bulletinOverlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'bulletinOverlay';
+      ov.className = 'bulletin-overlay';
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = `
+  <div class="bo-bar">
+    <button onclick="window.print()">🖨 Imprimer / PDF</button>
+    <button class="sec" onclick="document.getElementById('bulletinOverlay').classList.remove('show')">Fermer</button>
+  </div>
+  <div class="bo-wrap"><div class="bo-sheet">${render(data)}</div></div>`;
+    ov.classList.add('show');
+    fitOverlay();
+    window.scrollTo(0, 0);
+    return true;
+  }
+
+  window.addEventListener('resize', fitOverlay);
+
+  /* Exposé aux pages (classe.html lit MODELES ; note.html et espace-eleve.html lisent MOTIF) */
+  global.BULLETIN = {
+    estDisponible, ouvrir, render, mapMatiere,
+    MODELES, MODELE_DEFAUT, MOTIF: MOTIF_INDISPO
+  };
+})(window);
